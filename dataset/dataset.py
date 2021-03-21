@@ -11,11 +11,11 @@ import pandas as pd
 class BBFTSDataset(Dataset):
 
     def __init__(self, phase, config):
-        super(BBFTSDataset, self).__init__()
+        # super(BBFTSDataset, self).__init__()
         assert phase in ['train', 'test']
         assert config.labels_file.endswith('.csv')
-        self.data_fpath = osp.join(config.data_dir, phase)
-        df = pd.read_csv(osp.join(config.data_dir, config.labels_file))
+        self.data_fpath = osp.join(config.data_dir, osp.join(phase, 'motion'))
+        df = pd.read_csv(osp.join(config.data_dir, config.labels_file), header=0)
         self.labels_df = df.loc[df['phase'] == phase]
         self.phase = phase
         self.meanpose_path = config.meanpose_path
@@ -29,16 +29,18 @@ class BBFTSDataset(Dataset):
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
+            print('IS TENSOR IN GETITEM')
             idx = idx.tolist()  # TODO
 
-        label = np.zeros(2)
-        label_idx = int(self.labels_df[idx]['label'])  # TODO
-        label[label_idx] = 1
-
-        vid_name = self.labels_df[idx]['name']
+        vid_name = self.labels_df.iloc[idx]['name']
+        vid_name = f'{vid_name}.npy'
         vid_fpath = osp.join(self.data_fpath, vid_name)
         motion = np.load(vid_fpath)
         motion = self.preprocessing(motion)
+
+        # Create one-hot label vector
+        label_idx = self.labels_df.iloc[idx]['label']   # TODO
+        label = torch.from_numpy(np.array([label_idx])).type(torch.long)
 
         sample = {'motion': motion, 'label': label}
         return sample
@@ -46,15 +48,13 @@ class BBFTSDataset(Dataset):
     def preprocessing(self, motion):
         # Here i need to normalize 2d joints matrix
         # joints_arr = np.load(item)
-        print('=========== joints_arr =======')
-        print(motion)
-        print('======================')
         # if self.aug:
         #     motion3d, param = self.augmentation(motion3d, param)
-        # joints_arr = normalize_motion(joints_arr, self.mean_pose, self.std_pose)
-        # joints_arr = joints_arr.reshape((-1, joints_arr.shape[-1]))  # Should be (joints*2, len_frames)
-        # joints_arr = torch.Tensor(joints_arr)  # TODO from_numpy ?
-        motion = preprocess_motion2d(motion, self.mean_pose, self.std_pose)
+        motion = normalize_motion(motion, self.mean_pose, self.std_pose)
+        motion = motion.reshape((-1, motion.shape[-1]))  # Should be (joints*2, len_frames)
+        motion = torch.Tensor(motion)  # TODO from_numpy ?
+        # motion = preprocess_motion2d(motion, self.mean_pose, self.std_pose)
+
         return motion
 
     # @staticmethod
@@ -118,7 +118,7 @@ def get_meanpose(config):
 
 
 def gen_meanpose(config):
-    all_paths = glob.glob(osp.join(config.data_dir, 'train', 'motions/*.npy'))  # TODO this should be the paths to all the clips_joints.npy
+    all_paths = glob.glob(osp.join(config.data_dir, 'train', 'motion/*.npy'))  # TODO this should be the paths to all the clips_joints.npy
     all_joints = []
 
     for path in all_paths:

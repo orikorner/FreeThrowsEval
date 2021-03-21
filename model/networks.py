@@ -36,6 +36,8 @@ class Encoder(nn.Module):
             self.conv1x1 = nn.Conv1d(channels[-2], channels[-1], kernel_size=1)
 
     def forward(self, x):
+        print('=========== forward shape in encoder.forward =======')
+        print(x.shape)
         x = self.model(x)
         if self.global_pool is not None:
             ks = x.shape[-1]
@@ -108,6 +110,9 @@ class FtNet(nn.Module):
 
     def forward(self, x):
         # m = self.mot_encoder(x)
+        print('============ forward of network ========== ')
+        print(x.shape)
+        print('============ = ========== ')
         b = self.static_encoder(x[:, :-2, :])
         # b = b.repeat(1, 1, m.shape[-1])
         # d = torch.cat([m, b], dim=1)

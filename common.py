@@ -53,7 +53,7 @@ class Config:
 
     nr_epochs = 300
     batch_size = 64
-    num_workers = 4
+    num_workers = 0 # TODO
     lr = 1e-3
 
     save_frequency = 50
@@ -61,6 +61,7 @@ class Config:
     # visualize_frequency = 500
 
     def initialize(self, args):
+        self.name = args.name if hasattr(args, 'name') else 'tmp'
         # self.name = args.name if hasattr(args, 'name') else 'skeleton'
         # self.name = args.name if hasattr(args, 'name') else 'full'
         # self.use_triplet = not args.disable_triplet if hasattr(args, 'disable_triplet') else None

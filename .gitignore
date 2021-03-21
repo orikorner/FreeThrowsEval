@@ -1,0 +1,11 @@
+# Created by .ignore support plugin (hsz.mobi)
+.idea/workspace.xml
+# training logs directory
+train_log
+
+# data should be added manually
+*.mp4
+train/joints/*.json
+test/joints/*.json
+train/motion/*.npy
+test/motion/*.npy

@@ -89,3 +89,7 @@ def openpose2motion(json_dir, scale=1.0, smooth=True, max_frame=None):
 
 def get_foot_vel(batch_motion, foot_idx):
     return batch_motion[:, foot_idx, 1:] - batch_motion[:, foot_idx, :-1] + batch_motion[:, -2:, 1:].repeat(1, 2, 1)
+
+
+# if __name__ == '__main__':
+#     print(openpose2motion('bbfts_data/train/joints'))

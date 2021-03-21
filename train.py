@@ -23,6 +23,7 @@ CMD: train.py -g 0
 def parse_args():
     parser = argparse.ArgumentParser()
     # parser.add_argument('--dataset', type=str, help='path to poses')
+    parser.add_argument('--name', type=str, help='exp name')
     parser.add_argument('-c', '--continue', dest='continue_path', type=str, required=False)
     parser.add_argument('-g', '--gpu_ids', type=int, default=0, required=False, help="specify gpu ids")
     parser.add_argument('-aug', action='store_true', default=False, help="specify augmentations")

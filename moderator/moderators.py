@@ -17,8 +17,8 @@ class Moderator(object):
         self.net = net
         self.clock = TrainClock()
         self.device = config.device
-        self.use_triplet = config.use_triplet
-        self.use_footvel_loss = config.use_footvel_loss
+        # self.use_triplet = config.use_triplet
+        # self.use_footvel_loss = config.use_footvel_loss
 
         # set loss function
         # self.mse = nn.MSELoss()
@@ -33,18 +33,20 @@ class Moderator(object):
         self.scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, 0.99)
 
     def forward(self, data):
-        # inputs = [data[name].to(self.device) for name in self.inputs_name]
-        # targets = [data[name].to(self.device) for name in self.targets_name]
-        inputs, labels = data
+        inputs = data['motion'].to(self.device)
+        labels = data['label'].to(self.device)
+        # inputs, labels = data
         print('========== inputs ========')
-        print(inputs)
+        print(len(inputs))
+        print(inputs.shape)
         print('=========== targets =======')
-        print(labels)
+        print(labels.shape)
         print('======================')
         # update loss metric
         losses = {}
 
         outputs = self.net(inputs)
+
         losses['cross_entropy'] = self.cross_ent_loss(outputs, labels)
 
         return outputs, losses
