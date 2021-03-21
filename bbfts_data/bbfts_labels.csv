@@ -1,0 +1,7 @@
+name,phase,label
+ft1_21XSU9-dYf0,train,1
+ft1_vci_9DF3VDU,train,0
+ft1_WyYgKzaibvo,train,0
+ft2_21XSU9-dYf0,train,1
+ft2_vci_9DF3VDU,test,0
+ft2_WyYgKzaibvo,test,1
