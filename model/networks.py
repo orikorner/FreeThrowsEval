@@ -36,8 +36,6 @@ class Encoder(nn.Module):
             self.conv1x1 = nn.Conv1d(channels[-2], channels[-1], kernel_size=1)
 
     def forward(self, x):
-        print('=========== forward shape in encoder.forward =======')
-        print(x.shape)
         x = self.model(x)
         if self.global_pool is not None:
             ks = x.shape[-1]
@@ -52,12 +50,17 @@ class FtNet(nn.Module):
     This is the ensembled net object - meaning it combines the different part of the network.
     """
 
-    def __init__(self, body_en_channels, global_pool=None, convpool=None, compress=False):
+    def __init__(self, mot_en_channels, body_en_channels, global_pool=None, convpool=None, compress=False):
         super(FtNet, self).__init__()
 
         # here we assert num channles of first part matches second part
+        self.mot_encoder = Encoder(mot_en_channels)
         self.static_encoder = Encoder(body_en_channels, kernel_size=7, global_pool=global_pool, convpool=convpool,
                                       compress=compress)
+        self.ori_pooling = nn.AdaptiveAvgPool2d((None, 4))
+        self.fc1 = nn.Linear(768, 192)
+        self.fc2 = nn.Linear(192, 48)
+        self.fc3 = nn.Linear(48, 2)
 
     # def cross(self, x1, x2):
     #     m1 = self.mot_encoder(x1)
@@ -109,13 +112,20 @@ class FtNet(nn.Module):
     #     return outputs, motionvecs, bodyvecs
 
     def forward(self, x):
-        # m = self.mot_encoder(x)
-        print('============ forward of network ========== ')
-        print(x.shape)
-        print('============ = ========== ')
+        m = self.mot_encoder(x)
+        #print(f'm shape is: {m.shape}')
+        m = self.ori_pooling(m)
+        #print(f'm shape is: {m.shape}')
         b = self.static_encoder(x[:, :-2, :])
-        # b = b.repeat(1, 1, m.shape[-1])
-        # d = torch.cat([m, b], dim=1)
+        #print(f'b shape is: {b.shape}')
+        b = b.repeat(1, 1, m.shape[-1])
+        #print(f'b after repeat shape is: {b.shape}')
+        d = torch.cat([m, b], dim=1)
+        #print(f'd shape is: {d.shape}')
+        d = d.view(-1, 768)
+        #print(f'd shape after view is: {d.shape}')
+        d = F.relu(self.fc1(d))
+        d = F.relu(self.fc2(d))
+        d = self.fc3(d)
         # d = self.decoder(d)
-        # return d
-        return b
+        return d

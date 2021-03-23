@@ -1,16 +1,16 @@
 from dataset import get_dataloader
 from common import config
 from model import get_network
-# from functional.utils import cycle
 from utils.general import cycle
-# from agent import get_training_agent
 from moderator import get_training_moderator
-# from functional.visualization import visulize_motion_in_training
+from utils.visualization import plot_classes_preds
+import numpy as np
 import torch
 import os
 from collections import OrderedDict
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 import argparse
 
 torch.backends.cudnn.benchmark = True
@@ -23,11 +23,11 @@ CMD: train.py -g 0
 def parse_args():
     parser = argparse.ArgumentParser()
     # parser.add_argument('--dataset', type=str, help='path to poses')
-    parser.add_argument('--name', type=str, help='exp name')
+    parser.add_argument('--name', type=str, default='skeleton', help='exp name')
     parser.add_argument('-c', '--continue', dest='continue_path', type=str, required=False)
     parser.add_argument('-g', '--gpu_ids', type=int, default=0, required=False, help="specify gpu ids")
     parser.add_argument('-aug', action='store_true', default=False, help="specify augmentations")
-    parser.add_argument('--vis', action='store_true', default=False, help="visualize output in training")
+    # parser.add_argument('--vis', action='store_true', default=False, help="visualize output in training")
     args = parser.parse_args()
     return args
 
@@ -65,15 +65,10 @@ def main():
 
             losses_values = {k: v.item() for k, v in losses.items()}
 
-            # record loss to tensorboard
-            for k, v in losses_values.items():
-                train_tb.add_scalar(k, v, clock.step)
-
-            # visualize
-            # if args.vis and clock.step % config.visualize_frequency == 0:
-            #     imgs = visulize_motion_in_training(outputs, mean_pose, std_pose)
-            #     for k, img in imgs.items():
-            #         train_tb.add_image(k, torch.from_numpy(img), clock.step)
+            # record loss to tensorboard - key is loss type
+            if clock.step % config.visualize_frequency == 0:
+                for k, v in losses_values.items():
+                    train_tb.add_scalar(k, v, clock.step)
 
             pbar.set_description("EPOCH[{}][{}/{}]".format(e, b, len(train_loader)))
             pbar.set_postfix(OrderedDict({"loss": sum(losses_values.values())}))
@@ -86,14 +81,17 @@ def main():
 
                 losses_values = {k: v.item() for k, v in losses.items()}
 
-                for k, v in losses_values.items():
-                    val_tb.add_scalar(k, v, clock.step)
+                if clock.step % config.visualize_frequency == 0:
+                    for k, v in losses_values.items():
+                        val_tb.add_scalar(k, v, clock.step)
 
-                # if args.vis and clock.step % config.visualize_frequency == 0:
-                #     imgs = visulize_motion_in_training(outputs, mean_pose, std_pose)
-                #     for k, img in imgs.items():
-                #         val_tb.add_image(k, torch.from_numpy(img), clock.step)
+                    # val_tb.add_image(data['name'][0, ])
+                    # inputs = data['motion'].to(self.device)
+                    # labels = data['label'].to(self.device)
 
+                    val_tb.add_figure('predictions vs. actuals',
+                                      plot_classes_preds(net, data['name'], data['motion'], data['label']),
+                                      global_step=clock.step)
             clock.tick()
 
         train_tb.add_scalar('learning_rate', tr_moder.optimizer.param_groups[-1]['lr'], clock.epoch)
@@ -102,7 +100,6 @@ def main():
         if clock.epoch % config.save_frequency == 0:
             tr_moder.save_network()
         tr_moder.save_network('latest.pth.tar')
-
         clock.tock()
 
 

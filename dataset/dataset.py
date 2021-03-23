@@ -42,7 +42,7 @@ class BBFTSDataset(Dataset):
         label_idx = self.labels_df.iloc[idx]['label']   # TODO
         label = torch.from_numpy(np.array([label_idx])).type(torch.long)
 
-        sample = {'motion': motion, 'label': label}
+        sample = {'name': vid_name, 'motion': motion, 'label': label}
         return sample
 
     def preprocessing(self, motion):

@@ -10,8 +10,8 @@ class Config:
     name = None
     device = None
     aug = True
+
     # dataset paths
-    # data_dir = './mixamo_data'
     data_dir = './bbfts_data'
     labels_file = 'bbfts_labels.csv'
     meanpose_path = None
@@ -38,7 +38,7 @@ class Config:
     #                (0, 0, np.pi / 2)]
 
     # network channels
-    # mot_en_channels = None
+    mot_en_channels = None
     body_en_channels = None
     # view_en_channels = None
     # de_channels = None
@@ -51,18 +51,17 @@ class Config:
     # foot_idx = [20, 21, 26, 27]
     # footvel_loss_weight = 0.1
 
-    nr_epochs = 300
-    batch_size = 64
-    num_workers = 0 # TODO
+    nr_epochs = 50
+    batch_size = 16
+    num_workers = 0  # TODO
     lr = 1e-3
 
-    save_frequency = 50
-    val_frequency = 100
-    # visualize_frequency = 500
+    save_frequency = 25
+    val_frequency = 10
+    visualize_frequency = 20
 
     def initialize(self, args):
-        self.name = args.name if hasattr(args, 'name') else 'tmp'
-        # self.name = args.name if hasattr(args, 'name') else 'skeleton'
+        self.name = args.name if hasattr(args, 'name') else 'skeleton'
         # self.name = args.name if hasattr(args, 'name') else 'full'
         # self.use_triplet = not args.disable_triplet if hasattr(args, 'disable_triplet') else None
         # self.use_footvel_loss = args.use_footvel_loss if hasattr(args, 'use_footvel_loss') else None
@@ -75,9 +74,8 @@ class Config:
         self.model_dir = osp.join(self.exp_dir, 'model/')
         general.ensure_dirs([self.log_dir, self.model_dir])
 
-        # if self.name == 'skeleton':
-        if True:
-            # self.mot_en_channels = [self.len_joints + 2, 64, 96, 128]
+        if self.name == 'skeleton':
+            self.mot_en_channels = [self.len_joints + 2, 64, 96, 128]
             self.body_en_channels = [self.len_joints, 32, 48, 64]
             # self.de_channels = [self.mot_en_channels[-1] + self.body_en_channels[-1], 128, 64, self.len_joints + 2]
             # self.view_angles = None

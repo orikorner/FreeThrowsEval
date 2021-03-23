@@ -26,7 +26,7 @@ class Moderator(object):
         # self.triplet_weight = config.triplet_weight
         # self.foot_idx = config.foot_idx
         # self.footvel_loss_weight = config.footvel_loss_weight
-        self.cross_ent_loss = nn.CrossEntropyLoss()
+        self.cross_ent_loss = nn.CrossEntropyLoss() # TODO: .to(self.device)
 
         # set optimizer
         self.optimizer = optim.Adam(self.net.parameters(), config.lr)
@@ -34,14 +34,8 @@ class Moderator(object):
 
     def forward(self, data):
         inputs = data['motion'].to(self.device)
-        labels = data['label'].to(self.device)
-        # inputs, labels = data
-        print('========== inputs ========')
-        print(len(inputs))
-        print(inputs.shape)
-        print('=========== targets =======')
-        print(labels.shape)
-        print('======================')
+        labels = data['label'].to(self.device).argmax(1)
+
         # update loss metric
         losses = {}
 
