@@ -9,3 +9,6 @@ train/joints/*.json
 test/joints/*.json
 train/motion/*.npy
 test/motion/*.npy
+
+# checkpoints
+checkpoints/*.pth
