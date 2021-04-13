@@ -4,3 +4,6 @@ pandas==1.2.3
 scipy==1.6.1
 tensorboardX==2.1
 tqdm==4.59.0
+imageio-ffmpeg==0.4.3
+torchvision==0.7.0
+cudatoolkit==10.1.243
