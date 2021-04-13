@@ -1,6 +1,6 @@
 import os
 # from functional import utils
-from utils import general
+from utils import utils
 import torch
 import numpy as np
 import os.path as osp
@@ -72,7 +72,7 @@ class Config:
         self.exp_dir = osp.join(self.save_dir, 'exp_' + self.name)
         self.log_dir = osp.join(self.exp_dir, 'log/')
         self.model_dir = osp.join(self.exp_dir, 'model/')
-        general.ensure_dirs([self.log_dir, self.model_dir])
+        utils.ensure_dirs([self.log_dir, self.model_dir])
 
         if self.name == 'skeleton':
             self.mot_en_channels = [self.len_joints + 2, 64, 96, 128]

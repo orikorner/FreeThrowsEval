@@ -9,6 +9,7 @@ import cv2
 import math
 import torch
 import torchvision
+from tqdm import tqdm
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 from torchvision import transforms
@@ -95,8 +96,8 @@ def calc_iou(first, second, canvas_w, canvas_h):
 
     first_canvas = np.zeros((canvas_w, canvas_h))
     second_canvas = np.zeros((canvas_w, canvas_h))
-    first_canvas[first[0]:first[2], first[1]:first[3]] = 1
-    second_canvas[second[0]:second[2], second[1]:second[3]] = 1
+    first_canvas[int(first[0]):int(first[2]), int(first[1]):int(first[3])] = 1
+    second_canvas[int(second[0]):int(second[2]), int(second[1]):int(second[3])] = 1
     intersect = (first_canvas * second_canvas).sum(1).sum(0)
     union = (first_canvas + second_canvas).sum(1).sum(0)
     iou = (intersect + 0.001) / (union - intersect + 0.001)
@@ -114,7 +115,6 @@ def locate_ft_shooter_in_clip(model, clip_fpath, num_samples, num_frames):
     model.eval()
     loader = transforms.Compose([transforms.ToTensor()])
     with torch.no_grad():
-        # TODO probably no grad is redunant but verify
         for curr_frame in frame_samples:
 
             rgb_frame = cv2.cvtColor(curr_frame, cv2.COLOR_BGR2RGB)
@@ -127,10 +127,11 @@ def locate_ft_shooter_in_clip(model, clip_fpath, num_samples, num_frames):
             predictions.append(prediction)
             disp_imgs.append(pil_image)  # TODO maybe use it for testing visualization
 
-    w, h = disp_imgs[0].shape
-    box_bins = [[prediction[0][0]['boxes'][0].cpu().numpy()]]
+    w, h = disp_imgs[0].size
+    box_bins = [[predictions[0][0]['boxes'][0].cpu().numpy()]]
     for i in range(1, len(predictions)):
-        curr_box = prediction[i][0]['boxes'][0].cpu().numpy()
+        curr_box = predictions[i][0]['boxes'][0].cpu().numpy()
+
         found_bin = False
         for j in range(len(box_bins)):
             curr_iou = calc_iou(box_bins[j][0], curr_box, w, h)  # TODO maybe compare all not just 0
@@ -142,10 +143,15 @@ def locate_ft_shooter_in_clip(model, clip_fpath, num_samples, num_frames):
         if found_bin is False:
             box_bins.append([curr_box])
 
-        final_box_i = box_bins.index(max(box_bins, key=len))
-        final_box = box_bins[final_box_i][0]  # TODO currently taking the first
+    final_box_i = box_bins.index(max(box_bins, key=len))
+    min_x = sorted(box_bins[final_box_i], key=lambda x: x[0])[0][0] - 10
+    max_x = sorted(box_bins[final_box_i], key=lambda x: x[2], reverse=True)[0][2] + 10
+    min_y = sorted(box_bins[final_box_i], key=lambda x: x[1])[0][1] - 10
+    max_y = sorted(box_bins[final_box_i], key=lambda x: x[3], reverse=True)[0][3] + 10
 
-        return final_box
+    final_box = [min_x, min_y, max_x, max_y]
+
+    return final_box
 
 
 def prepare_model(state_dict):
@@ -184,19 +190,23 @@ def openpose2motionv2(json_dir, ft_bounding_box, scale=1.0, smooth=True, max_fra
     json_files = [osp.join(json_dir, x) for x in json_files]
 
     motion = []
-    for path in json_files:
+    # print(f'({ft_bounding_box[0]},{ft_bounding_box[1]}), ({ft_bounding_box[2]},{ft_bounding_box[3]})')
+    for j, path in enumerate(json_files):
         with open(path) as f:
             jointDict = json.load(f)
             people_poses_arr = jointDict['people']
-            for person_pose_info in people_poses_arr:
-            # joint = np.array(jointDict['people'][0]['pose_keypoints_2d']).reshape((-1, 3))[:15, :2]
+            for i, person_pose_info in enumerate(people_poses_arr):
                 curr_joint = np.array(person_pose_info['pose_keypoints_2d']).reshape((-1, 3))[:15, :2]
                 curr_hips = curr_joint[8]
+                is_in = 0
                 if ft_bounding_box[0] < curr_hips[0] < ft_bounding_box[2] and \
                         ft_bounding_box[1] < curr_hips[1] < ft_bounding_box[3]:
+                    is_in = 1
                     if len(motion) > 0:
                         curr_joint[np.where(curr_joint == 0)] = motion[-1][np.where(curr_joint == 0)]
                     motion.append(curr_joint)
+                # print(f'{is_in} - {i} - {curr_hips}')
+        # print(f'========= Frame {j} =========')
 
     for i in range(len(motion) - 1, 0, -1):
         motion[i - 1][np.where(motion[i - 1] == 0)] = motion[i][np.where(motion[i - 1] == 0)]
@@ -225,8 +235,8 @@ def json2npy(data_dir, state_dict, num_samples):
         # Second we extract all poses into a matrix
         clip_joints_dir_fpath = osp.join(joints_dir_fpath, clip_name)
         joints_json_files = os.listdir(clip_joints_dir_fpath)
-        num_frames = len(joints_json_files) # TODO
-        motion = openpose2motionv2(clip_joints_dir_fpath, ft_bounding_box, max_frame=42, smooth=False)
+        num_frames = len(joints_json_files)  # TODO
+        motion = openpose2motionv2(clip_joints_dir_fpath, ft_bounding_box, max_frame=num_frames, smooth=False)
         # returned motion shape is (J, 2, max_frame) and belongs to the free throws shooter
         # Here i am saving a matrix representing motion in 42 frames
         save_fpath = osp.join(out_dir, clip_name)

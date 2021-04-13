@@ -1,6 +1,6 @@
 # from agent.base_agent import BaseAgent
 # from functional.motion import get_foot_vel
-from utils.general import TrainClock
+from utils.utils import TrainClock
 import torch
 import torch.nn as nn
 import torch.optim as optim
