@@ -4,7 +4,8 @@
 train_log
 
 # data should be added manually
-*.mp4
+train/clips/*.mp4
+test/clips/*.mp4
 train/joints/*.json
 test/joints/*.json
 train/motion/*.npy

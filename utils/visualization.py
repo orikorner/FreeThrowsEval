@@ -9,6 +9,7 @@ from tqdm import tqdm
 import utils
 from PIL import Image
 import imageio
+import os
 import os.path as osp
 # from utils.operators import normalize_motion_inv, trans_motion_inv
 
@@ -16,9 +17,9 @@ import os.path as osp
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--joints', type=str, help='full path to joints file as .npy')
-    parser.add_argument('--in-vid', type=str, help='full path to clip as .mp4')
-    parser.add_argument('--out-vid', type=str, help='full path to output clip dir')
+    parser.add_argument('--joints-dir', type=str, help='full path to joints file as .npy')
+    parser.add_argument('--clips-dir', type=str, help='full path to clip as .mp4')
+    parser.add_argument('--out-dir', type=str, help='full path to output clip dir')
 
     args = parser.parse_args()
     return args
@@ -257,10 +258,10 @@ def pose2im(all_peaks, limbSeq, limb_colors, joint_colors, H, W, _circle=True, _
 
     if _circle:
         for i in range(len(joint_colors)):
-            cv2.circle(canvas, (int(all_peaks[i][0]), int(all_peaks[i][1])), 2, joint_colors[i], thickness=2)
+            cv2.circle(canvas, (int(all_peaks[i][0]), int(all_peaks[i][1])), 2, joint_colors[i], thickness=1)
 
     if _limb:
-        stickwidth = 2
+        stickwidth = 1
 
         for i in range(len(limbSeq)):
             limb = limbSeq[i]
@@ -306,41 +307,41 @@ def motion2video(motion, h, w, save_path, colors, transparency=False, motion_tgt
             save_image(img_cropped, osp.join(frames_dir, "%04d.png" % i))
         videowriter.append_data(img)
     videowriter.close()
-#
-#
-# def visulize_motion_in_training(output, mean_pose, std_pose, nr_visual=4, H=512, W=512):
-#     ret = {}
-#
-#     motion = output.detach().cpu().numpy()
-#     inds = np.linspace(0, motion.shape[1] - 1, nr_visual, dtype=int)
-#     motion = motion[:, inds]
-#     motion = motion.reshape(-1, 2, motion.shape[-1])
-#     motion = normalize_motion_inv(motion, mean_pose, std_pose)
-#     peaks = trans_motion_inv(motion)
-#
-#     heatmaps = []
-#     for i in range(peaks.shape[2]):
-#         skeleton = pose2im_all(peaks[:, :, i], H, W)
-#         heatmaps.append(skeleton)
-#     heatmaps = np.stack(heatmaps).transpose((0, 3, 1, 2)) / 255.0
-#     # ret[k] = heatmaps
-#
-#     return ret
 
 
 if __name__ == '__main__':
     args = parse_args()
-    motion = np.load(args.joints)
-    # for i in range(42):
-    #     print(motion[8, :, i])
-    capture = cv2.VideoCapture(args.in_vid)
-    width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    length = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
-    fps = int(capture.get(cv2.CAP_PROP_FPS))
+
+    joints = os.listdir(args.joints_dir)
+    clips = [x for x in os.listdir(args.clips_dir) if x.endswith('.mp4')]
+
+    assert len(joints) == len(clips)
 
     color1 = hex2rgb('#a50b69#b73b87#db9dc3')
     color2 = hex2rgb('#4076e0#40a7e0#40d7e0')
     color3 = hex2rgb('#ff8b06#ffb431#ffcd9d')
     colors = [color1, color2, color3]
-    motion2video(motion, height, width, args.out_vid, color1, transparency=False, motion_tgt=None, fps=fps, save_frame=False)
+
+    for i, curr_item in enumerate(zip(joints, clips)):
+        curr_joints, curr_clip = curr_item
+
+        curr_out_name = osp.join(args.out_dir, curr_clip)
+
+        motion = np.load(osp.join(args.joints_dir, curr_joints))
+
+        capture = cv2.VideoCapture(osp.join(args.clips_dir, curr_clip))
+        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        length = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = int(capture.get(cv2.CAP_PROP_FPS))
+
+        if width > 1000 and height > 700:
+            if fps < 24 or fps > 25:
+                print(f'{curr_clip} - FPS: {fps}')
+            motion2video(motion, height, width, curr_out_name, color1,
+                         transparency=False, motion_tgt=None, fps=fps, save_frame=False)
+        else:
+            print(f'{curr_clip} - W: {width} , H: {height}')
+
+        capture.release()
+        print(f'====== Finished {i} ======')
