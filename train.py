@@ -86,11 +86,11 @@ def main():
                         val_tb.add_scalar(k, v, clock.step)
 
                     # val_tb.add_image(data['name'][0, ])
-                    # inputs = data['motion'].to(self.device)
-                    # labels = data['label'].to(self.device)
-
+                    inputs = data['motion'].to(config.device)
+                    labels = data['label']#.to(config.device)
+                    # name = data['name'].to()
                     val_tb.add_figure('predictions vs. actuals',
-                                      plot_classes_preds(net, data['name'], data['motion'], data['label']),
+                                      plot_classes_preds(net, data['name'], inputs, labels),
                                       global_step=clock.step)
             clock.tick()
 

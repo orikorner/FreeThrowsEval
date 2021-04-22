@@ -189,8 +189,10 @@ def prepare_model(state_dict):
     return model
 
 
-def is_point_in_rectangle(rectangle, point):
+def is_point_in_rectangle(rectangle, point, name=None):
     if rectangle[0] < point[0] < rectangle[2] and rectangle[1] < point[1] < rectangle[3]:
+        if name is not None:
+            print(name)
         return True
     return False
 
@@ -205,14 +207,18 @@ def count_main_joints_in_box(bounding_box, joints):
 
 
 def openpose2motionv2(json_dir, ft_bounding_box, scale=1.0, smooth=True, max_frame=None):
-    length = max_frame
+    length = max_frame - 1
     json_files = sorted(os.listdir(json_dir))
     json_files = [osp.join(json_dir, x) for x in json_files]
 
     box_vert_len = np.abs(ft_bounding_box[3] - ft_bounding_box[1])
+    box_horz_len = np.abs(ft_bounding_box[2] - ft_bounding_box[0])
     trimmed_box_max_y = ft_bounding_box[1] + (box_vert_len * 0.35)
-    hips_based_box = [ft_bounding_box[0], trimmed_box_max_y, ft_bounding_box[2], ft_bounding_box[3]]
-    head_based_box = [ft_bounding_box[0], ft_bounding_box[1], ft_bounding_box[2], trimmed_box_max_y]
+    trimmed_box_min_y = ft_bounding_box[3] - (box_vert_len * 0.35)
+    extended_box_min_x = ft_bounding_box[0] - (box_horz_len * 0.18)
+    extended_box_max_x = ft_bounding_box[2] + (box_horz_len * 0.18)
+    hips_based_box = [extended_box_min_x, trimmed_box_max_y, extended_box_max_x, ft_bounding_box[3]]
+    head_based_box = [extended_box_min_x, ft_bounding_box[1], extended_box_max_x, trimmed_box_min_y]
     box_center = (0.25 * (ft_bounding_box[0] + ft_bounding_box[2]), 0.25 * (ft_bounding_box[1] + ft_bounding_box[3]))
     motion = []
     for j, path in enumerate(json_files):
@@ -222,10 +228,24 @@ def openpose2motionv2(json_dir, ft_bounding_box, scale=1.0, smooth=True, max_fra
             joint_candidate = []
             for i, person_pose_info in enumerate(people_poses_arr):
                 curr_joint = np.array(person_pose_info['pose_keypoints_2d']).reshape((-1, 3))[:15, :2]
+                top_check_pass = False
+                bottom_check_pass = False
                 curr_hips = curr_joint[8]
+                curr_r_leg = curr_joint[9]
+                curr_l_leg = curr_joint[12]
                 curr_head = curr_joint[0]
-                if is_point_in_rectangle(hips_based_box, curr_hips) and \
-                        is_point_in_rectangle(head_based_box, curr_head):
+                curr_neck = curr_joint[1]
+                if curr_hips[0] != 0 and is_point_in_rectangle(hips_based_box, curr_hips) or \
+                        curr_l_leg[0] != 0 and is_point_in_rectangle(hips_based_box, curr_l_leg) or \
+                        curr_r_leg[0] != 0 and is_point_in_rectangle(hips_based_box, curr_r_leg):
+                    bottom_check_pass = True
+
+                if bottom_check_pass:
+                    if curr_head[0] != 0 and is_point_in_rectangle(head_based_box, curr_head) or \
+                            curr_neck[0] != 0 and is_point_in_rectangle(head_based_box, curr_neck):
+                        top_check_pass = True
+
+                if top_check_pass and bottom_check_pass:
                     if len(motion) > 0:
                         # fills joints with 0 value to be the same as their previous value (in previous frame)
                         curr_joint[np.where(curr_joint == 0)] = motion[-1][np.where(curr_joint == 0)]
@@ -238,7 +258,6 @@ def openpose2motionv2(json_dir, ft_bounding_box, scale=1.0, smooth=True, max_fra
                         joint_candidate.sort(
                             key=lambda p: np.abs(p[8][0] - box_center[0]) + np.abs(p[8][1] - box_center[1]) +
                                           np.abs(p[0][0] - box_center[0]) + np.abs(p[0][1] - box_center[1]))
-                        # joint_candidate.sort(key=count_main_joints_in_box)
                     else:
                         last_hips = np.array(motion[-1][8])
                         last_head = motion[-1][0]
@@ -253,7 +272,8 @@ def openpose2motionv2(json_dir, ft_bounding_box, scale=1.0, smooth=True, max_fra
         if j >= length:
             break
 
-    # print(f'len_mot: {len(motion)} - mf: {max_frame}')
+    if len(motion) != max_frame:
+        print(f'!!!!!!! len_mot: {len(motion)} - mf: {max_frame}')
     
     for i in range(len(motion) - 1, 0, -1):
         motion[i - 1][np.where(motion[i - 1] == 0)] = motion[i][np.where(motion[i - 1] == 0)]
@@ -264,15 +284,15 @@ def openpose2motionv2(json_dir, ft_bounding_box, scale=1.0, smooth=True, max_fra
         motion = gaussian_filter1d(motion, sigma=2, axis=-1)
     motion = motion * scale
 
-    zeros_cnt = 0
-    zeros_joints = []
-    for ii in range(len(motion[0][0])):
-        for jj in range(len(motion[:, 0, ii])):
-            if motion[jj][0][ii] == 0 and motion[jj][0][ii] == 0:
-                zeros_cnt += 1
-                zeros_joints.append(jj)
-    if zeros_cnt > 0:
-        print(f'{zeros_cnt} + {zeros_joints}')
+    # zeros_cnt = 0
+    # zeros_joints = []
+    # for ii in range(len(motion[0][0])):
+    #     for jj in range(len(motion[:, 0, ii])):
+    #         if motion[jj][0][ii] == 0 and motion[jj][0][ii] == 0:
+    #             zeros_cnt += 1
+    #             zeros_joints.append(jj)
+    # if zeros_cnt > 0:
+    #     print(f'{zeros_cnt} + {zeros_joints}')
     return motion
 
 
@@ -290,13 +310,14 @@ def json2npy(data_dir, state_dict, num_samples):
         curr_clip_fpath = f'{curr_clip_fpath}.mp4'
         ft_bounding_box = locate_ft_shooter_in_clip(model, curr_clip_fpath, num_samples=num_samples, num_frames=50)
         if ft_bounding_box is None:
-            print('!!!!! Failed Detecting a FT Shooter !!!!!')
+            print('!!!!! Failed Detecting a FT Shooter !!!!!')#123,113,104,195
             continue
         # Second we extract all poses into a matrix
         clip_joints_dir_fpath = osp.join(joints_dir_fpath, clip_name)
         joints_json_files = os.listdir(clip_joints_dir_fpath)
-        # num_frames = min(len(joints_json_files), 50)  # TODO
-        num_frames = len(joints_json_files)
+        num_frames = min(len(joints_json_files), 40)  # TODO
+        assert num_frames == 40
+        # num_frames = len(joints_json_files)
         motion = openpose2motionv2(clip_joints_dir_fpath, ft_bounding_box, max_frame=num_frames, smooth=False)
         # returned motion shape is (J, 2, max_frame) and belongs to the free throws shooter
         # Here i am saving a matrix representing motion in 42 frames

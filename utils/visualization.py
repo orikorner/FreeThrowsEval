@@ -44,7 +44,7 @@ def images_to_probs(net, images):
     output = net(images)
     # convert output probabilities to predicted class
     _, preds_tensor = torch.max(output, 1)
-    preds = np.squeeze(preds_tensor.numpy())
+    preds = np.squeeze(preds_tensor.cpu().clone().numpy())
     return preds, [F.softmax(el, dim=0)[i].item() for i, el in zip(preds, output)]
 
 
@@ -57,6 +57,11 @@ def plot_classes_preds(net, vid_names, images, labels):
     Uses the "images_to_probs" function.
     '''
     preds, probs = images_to_probs(net, images)
+    print('=============')
+    print(vid_names)
+    print(preds)
+    print(probs)
+    print('=============')
     dummy_mat = [(np.random.rand(28, 28) - 0.5) / 0.5 for ii in range(len(labels))]
     # dummy_mat = [np.random.randn(28, 28) for ii in range(len(labels))]
     # dummy_mat = np.stack(dummy_mat, axis=0)

@@ -51,8 +51,8 @@ class Config:
     # foot_idx = [20, 21, 26, 27]
     # footvel_loss_weight = 0.1
 
-    nr_epochs = 50
-    batch_size = 16
+    nr_epochs = 100
+    batch_size = 4
     num_workers = 0  # TODO
     lr = 1e-3
 
@@ -80,9 +80,7 @@ class Config:
             # self.de_channels = [self.mot_en_channels[-1] + self.body_en_channels[-1], 128, 64, self.len_joints + 2]
             # self.view_angles = None
 
-            # self.meanpose_path = './mixamo_data/meanpose.npy'
             self.meanpose_path = './bbfts_data/meanpose.npy'
-            # self.stdpose_path = './mixamo_data/stdpose.npy'
             self.stdpose_path = './bbfts_data/stdpose.npy'
         # elif self.name == 'view':
         #     self.mot_en_channels = [self.len_joints + 2, 64, 96, 128]

@@ -15,6 +15,7 @@ class BBFTSDataset(Dataset):
         assert phase in ['train', 'test']
         assert config.labels_file.endswith('.csv')
         self.data_fpath = osp.join(config.data_dir, osp.join(phase, 'motion'))
+        self.video_names = os.listdir(self.data_fpath)
         df = pd.read_csv(osp.join(config.data_dir, config.labels_file), header=0)
         self.labels_df = df.loc[df['phase'] == phase]
         self.phase = phase
@@ -32,15 +33,18 @@ class BBFTSDataset(Dataset):
             print('IS TENSOR IN GETITEM')
             idx = idx.tolist()  # TODO
 
-        vid_name = self.labels_df.iloc[idx]['name']
-        vid_name = f'{vid_name}.npy'
-        vid_fpath = osp.join(self.data_fpath, vid_name)
-        motion = np.load(vid_fpath)
-        motion = self.preprocessing(motion)
-
+        # vid_name, _ = self.video_names[idx].split('.')
+        vid_name = self.labels_df.iloc[idx]['video_name']
+        # label_idx = self.labels_df.loc[self.labels_df['video_name'] == vid_name, 'label'].item()
         # Create one-hot label vector
         label_idx = self.labels_df.iloc[idx]['label']   # TODO
         label = torch.from_numpy(np.array([label_idx])).type(torch.long)
+
+        # vid_name = f'{vid_name}.npy'
+        vid_fpath = osp.join(self.data_fpath, f'{vid_name}.npy')
+        motion = np.load(vid_fpath)
+        # print(f'{vid_name} : {motion.shape}')
+        motion = self.preprocessing(motion)
 
         sample = {'name': vid_name, 'motion': motion, 'label': label}
         return sample
