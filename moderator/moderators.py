@@ -34,8 +34,7 @@ class Moderator(object):
 
     def forward(self, data):
         inputs = data['motion'].to(self.device)
-        labels = data['label'].to(self.device).argmax(1)
-
+        labels = data['label'].to(self.device).reshape(-1)#.argmax(1)
         # update loss metric
         losses = {}
 

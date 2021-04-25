@@ -9,7 +9,7 @@ import torch
 import os
 from collections import OrderedDict
 from tqdm import tqdm
-from tensorboardX import SummaryWriter
+# from tensorboardX import SummaryWriter
 from torch.utils.tensorboard import SummaryWriter
 import argparse
 
@@ -27,7 +27,8 @@ def parse_args():
     parser.add_argument('-c', '--continue', dest='continue_path', type=str, required=False)
     parser.add_argument('-g', '--gpu_ids', type=int, default=0, required=False, help="specify gpu ids")
     parser.add_argument('-aug', action='store_true', default=False, help="specify augmentations")
-    # parser.add_argument('--vis', action='store_true', default=False, help="visualize output in training")
+    parser.add_argument('--dbg-mode', action='store_true', default=False, help="Prints model info")
+
     args = parser.parse_args()
     return args
 
@@ -47,7 +48,7 @@ def main():
     # create dataloader
     train_loader = get_dataloader('train', config, config.batch_size, config.num_workers)
     # mean_pose, std_pose = train_loader.dataset.mean_pose, train_loader.dataset.std_pose
-    val_loader = get_dataloader('test', config, config.batch_size, config.num_workers)
+    val_loader = get_dataloader('test', config, 22, config.num_workers)
     val_loader = cycle(val_loader)
 
     # create training agent
@@ -66,9 +67,8 @@ def main():
             losses_values = {k: v.item() for k, v in losses.items()}
 
             # record loss to tensorboard - key is loss type
-            if clock.step % config.visualize_frequency == 0:
-                for k, v in losses_values.items():
-                    train_tb.add_scalar(k, v, clock.step)
+            for k, v in losses_values.items():
+                train_tb.add_scalar(k, v, clock.step)
 
             pbar.set_description("EPOCH[{}][{}/{}]".format(e, b, len(train_loader)))
             pbar.set_postfix(OrderedDict({"loss": sum(losses_values.values())}))
@@ -81,17 +81,16 @@ def main():
 
                 losses_values = {k: v.item() for k, v in losses.items()}
 
-                if clock.step % config.visualize_frequency == 0:
-                    for k, v in losses_values.items():
-                        val_tb.add_scalar(k, v, clock.step)
+                for k, v in losses_values.items():
+                    val_tb.add_scalar(k, v, clock.step)
 
-                    # val_tb.add_image(data['name'][0, ])
-                    inputs = data['motion'].to(config.device)
-                    labels = data['label']#.to(config.device)
-                    # name = data['name'].to()
-                    val_tb.add_figure('predictions vs. actuals',
-                                      plot_classes_preds(net, data['name'], inputs, labels),
-                                      global_step=clock.step)
+                # val_tb.add_image(data['name'][0, ])
+                inputs = data['motion'].to(config.device)
+                labels = data['label']
+                vid_names = data['name']
+                val_tb.add_figure('Predictions vs. Actual',
+                                  plot_classes_preds(outputs, vid_names, inputs, labels),
+                                  global_step=clock.step)
             clock.tick()
 
         train_tb.add_scalar('learning_rate', tr_moder.optimizer.param_groups[-1]['lr'], clock.epoch)

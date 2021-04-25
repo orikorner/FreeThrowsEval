@@ -11,7 +11,6 @@ from PIL import Image
 import imageio
 import os
 import os.path as osp
-# from utils.operators import normalize_motion_inv, trans_motion_inv
 
 
 def parse_args():
@@ -36,19 +35,18 @@ def matplotlib_imshow(img, one_channel=False):
         plt.imshow(np.transpose(npimg, (1, 2, 0)))
 
 
-def images_to_probs(net, images):
+def images_to_probs(outputs, images):
     '''
     Generates predictions and corresponding probabilities from a trained
     network and a list of images
     '''
-    output = net(images)
     # convert output probabilities to predicted class
-    _, preds_tensor = torch.max(output, 1)
+    _, preds_tensor = torch.max(outputs, 1)
     preds = np.squeeze(preds_tensor.cpu().clone().numpy())
-    return preds, [F.softmax(el, dim=0)[i].item() for i, el in zip(preds, output)]
+    return preds, [F.softmax(el, dim=0)[i].item() for i, el in zip(preds, outputs)]
 
 
-def plot_classes_preds(net, vid_names, images, labels):
+def plot_classes_preds(outputs, vid_names, images, labels):
     '''
     Generates matplotlib Figure using a trained network, along with images
     and labels from a batch, that shows the network's top prediction along
@@ -56,12 +54,16 @@ def plot_classes_preds(net, vid_names, images, labels):
     information based on whether the prediction was correct or not.
     Uses the "images_to_probs" function.
     '''
-    preds, probs = images_to_probs(net, images)
-    print('=============')
-    print(vid_names)
-    print(preds)
-    print(probs)
-    print('=============')
+    preds, probs = images_to_probs(outputs, images)
+    # print('=============')
+    # print(vid_names)
+    # print(labels.reshape(-1))
+    # print(preds)
+    # print(probs)
+    # print('=============')
+    correct = np.logical_not(np.logical_xor(np.array(preds), labels.reshape(-1).numpy())).sum()
+    print(f'Accuracy: {correct / len(labels):.3}')
+
     dummy_mat = [(np.random.rand(28, 28) - 0.5) / 0.5 for ii in range(len(labels))]
     # dummy_mat = [np.random.randn(28, 28) for ii in range(len(labels))]
     # dummy_mat = np.stack(dummy_mat, axis=0)
@@ -70,7 +72,7 @@ def plot_classes_preds(net, vid_names, images, labels):
     # plot the images in the batch, along with predicted and true labels
     fig = plt.figure(figsize=(12, 48))
     for idx in np.arange(len(labels)):
-        ax = fig.add_subplot(1, 4, idx+1, xticks=[], yticks=[])
+        ax = fig.add_subplot(1, len(images), idx+1, xticks=[], yticks=[])
         # matplotlib_imshow(dummy_mat[idx], one_channel=True)
         plt.imshow(dummy_mat[idx], cmap="Greys")
         ax.set_title("{0}, {1:.1f}%\n(label: {2})\n{3}".format(
@@ -80,39 +82,6 @@ def plot_classes_preds(net, vid_names, images, labels):
             vid_names[idx]),
                     color=("green" if preds[idx] == labels[idx].item() else "red"))
     return fig
-
-
-# def write_pose_to_video(in_video_fpath, out_video_fpath, frames):
-#     """
-#     Writes frames to an mp4 video file
-#     :param file_path: Path to output video, must end with .mp4
-#     :param frames: List of PIL.Image objects
-#     :param fps: Desired frame rate
-#     """
-#
-#     capture = cv2.VideoCapture(in_video_fpath)
-#     width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-#     height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-#     length = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
-#     fps = int(capture.get(cv2.CAP_PROP_FPS))
-#
-#     data = torch.FloatTensor([frames]).cuda()
-#     video_out = cv2.VideoWriter(out_video_fpath, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
-#
-#     for i in tqdm(range(length)):
-#         ok, frame = capture.read()
-#         frame = torch.FloatTensor([frame]) / 127.5 - 1.0  # (L, H, W, 3)
-#         frame = frame.permute(3, 0, 1, 2).unsqueeze(0).cuda()  # (1, 3, L, H, W)
-#         wm_frame = self.encoder(frame, data)  # (1, 3, L, H, W)
-#         wm_frame = torch.clamp(wm_frame, min=-1.0, max=1.0)
-#         wm_frame = (
-#                 (wm_frame[0, :, 0, :, :].permute(1, 2, 0) + 1.0) * 127.5
-#         ).detach().cpu().numpy().astype("uint8")
-#         video_out.write(wm_frame)
-#
-#     video_out.release()
-#     capture.release()
-#     cv2.destroyAllWindows()
 
 
 def save_image(image_numpy, image_path):
@@ -317,6 +286,7 @@ def motion2video(motion, h, w, save_path, colors, transparency=False, motion_tgt
 if __name__ == '__main__':
     args = parse_args()
 
+    utils.ensure_dir(args.out_dir)
     joints = os.listdir(args.joints_dir)
     clips = [x for x in os.listdir(args.clips_dir) if x.endswith('.mp4')]
 

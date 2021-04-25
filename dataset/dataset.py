@@ -33,17 +33,14 @@ class BBFTSDataset(Dataset):
             print('IS TENSOR IN GETITEM')
             idx = idx.tolist()  # TODO
 
-        # vid_name, _ = self.video_names[idx].split('.')
         vid_name = self.labels_df.iloc[idx]['video_name']
-        # label_idx = self.labels_df.loc[self.labels_df['video_name'] == vid_name, 'label'].item()
         # Create one-hot label vector
-        label_idx = self.labels_df.iloc[idx]['label']   # TODO
+        label_idx = self.labels_df.iloc[idx]['label']
         label = torch.from_numpy(np.array([label_idx])).type(torch.long)
 
-        # vid_name = f'{vid_name}.npy'
         vid_fpath = osp.join(self.data_fpath, f'{vid_name}.npy')
         motion = np.load(vid_fpath)
-        # print(f'{vid_name} : {motion.shape}')
+
         motion = self.preprocessing(motion)
 
         sample = {'name': vid_name, 'motion': motion, 'label': label}
@@ -140,7 +137,6 @@ def gen_meanpose(config):
         #         all_joints.append(motion_proj)
 
     all_joints = np.concatenate(all_joints, axis=2)
-
     meanpose = np.mean(all_joints, axis=2)
     stdpose = np.std(all_joints, axis=2)
     stdpose[np.where(stdpose == 0)] = 1e-9

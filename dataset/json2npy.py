@@ -1,4 +1,4 @@
-# from utils.operators import openpose2motion
+from utils.operators import openpose2motion
 from scipy.ndimage import gaussian_filter1d
 import json
 import os
@@ -28,6 +28,8 @@ def parse_args():
     parser.add_argument('--data-dir', type=str, help='fpath to dataset dir')
     parser.add_argument('--checkpoint', type=str, help='fpath to mask rcnn model weights')
     parser.add_argument('--num-samples', type=int, default=5, help='Num of frames to sample for ft shooter detection')
+    parser.add_argument('--num-frames', type=int, default=40, help='Num of frames to take for output')
+    parser.add_argument('--w-smooth', action='store_true', default=False, help='whether to smooth motion')
 
     args = parser.parse_args()
     return args
@@ -272,8 +274,8 @@ def openpose2motionv2(json_dir, ft_bounding_box, scale=1.0, smooth=True, max_fra
         if j >= length:
             break
 
-    if len(motion) != max_frame:
-        print(f'!!!!!!! len_mot: {len(motion)} - mf: {max_frame}')
+    # if len(motion) != max_frame:
+    #     print(f'!!!!!!! len_mot: {len(motion)} - mf: {max_frame}')
     
     for i in range(len(motion) - 1, 0, -1):
         motion[i - 1][np.where(motion[i - 1] == 0)] = motion[i][np.where(motion[i - 1] == 0)]
@@ -296,7 +298,8 @@ def openpose2motionv2(json_dir, ft_bounding_box, scale=1.0, smooth=True, max_fra
     return motion
 
 
-def json2npy(data_dir, state_dict, num_samples):
+def json2npy(data_dir, state_dict, num_samples, num_frames, smooth):
+    work_num_frames = num_frames
     # preparing model
     model = prepare_model(state_dict)
     clips_dir_fpath = osp.join(data_dir, CLIPS_DIR)
@@ -310,17 +313,20 @@ def json2npy(data_dir, state_dict, num_samples):
         curr_clip_fpath = f'{curr_clip_fpath}.mp4'
         ft_bounding_box = locate_ft_shooter_in_clip(model, curr_clip_fpath, num_samples=num_samples, num_frames=50)
         if ft_bounding_box is None:
-            print('!!!!! Failed Detecting a FT Shooter !!!!!')#123,113,104,195
+            print('!!!!! Failed Detecting a FT Shooter !!!!!')
             continue
         # Second we extract all poses into a matrix
         clip_joints_dir_fpath = osp.join(joints_dir_fpath, clip_name)
         joints_json_files = os.listdir(clip_joints_dir_fpath)
-        num_frames = min(len(joints_json_files), 40)  # TODO
-        assert num_frames == 40
+        if num_frames == -1:
+            work_num_frames = len(joints_json_files)
+        else:
+            work_num_frames = min(len(joints_json_files), num_frames)
+            assert num_frames == work_num_frames
         # num_frames = len(joints_json_files)
-        motion = openpose2motionv2(clip_joints_dir_fpath, ft_bounding_box, max_frame=num_frames, smooth=False)
+        motion = openpose2motionv2(clip_joints_dir_fpath, ft_bounding_box, max_frame=work_num_frames, smooth=smooth)
         # returned motion shape is (J, 2, max_frame) and belongs to the free throws shooter
-        # Here i am saving a matrix representing motion in 42 frames
+        # Here i am saving a matrix representing motion in 40 frames
         save_fpath = osp.join(out_dir, clip_name)
         save_fpath = f'{save_fpath}.npy'
         print(save_fpath)
@@ -329,4 +335,4 @@ def json2npy(data_dir, state_dict, num_samples):
 
 if __name__ == '__main__':
     args = parse_args()
-    json2npy(args.data_dir, args.checkpoint, args.num_samples)
+    json2npy(args.data_dir, args.checkpoint, args.num_samples, args.num_frames, args.w_smooth)

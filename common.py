@@ -9,6 +9,7 @@ import os.path as osp
 class Config:
     name = None
     device = None
+    dbg_mode = False
     aug = True
 
     # dataset paths
@@ -51,30 +52,28 @@ class Config:
     # foot_idx = [20, 21, 26, 27]
     # footvel_loss_weight = 0.1
 
-    nr_epochs = 100
+    nr_epochs = 20
     batch_size = 4
     num_workers = 0  # TODO
     lr = 1e-3
 
     save_frequency = 25
     val_frequency = 10
-    visualize_frequency = 20
 
     def initialize(self, args):
         self.name = args.name if hasattr(args, 'name') else 'skeleton'
-        # self.name = args.name if hasattr(args, 'name') else 'full'
         # self.use_triplet = not args.disable_triplet if hasattr(args, 'disable_triplet') else None
         # self.use_footvel_loss = args.use_footvel_loss if hasattr(args, 'use_footvel_loss') else None
-
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_ids)
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.dbg_mode = args.dbg_mode
         self.aug = args.aug
         self.exp_dir = osp.join(self.save_dir, 'exp_' + self.name)
         self.log_dir = osp.join(self.exp_dir, 'log/')
         self.model_dir = osp.join(self.exp_dir, 'model/')
         utils.ensure_dirs([self.log_dir, self.model_dir])
 
-        if self.name == 'skeleton':
+        if True: #self.name == 'skeleton':
             self.mot_en_channels = [self.len_joints + 2, 64, 96, 128]
             self.body_en_channels = [self.len_joints, 32, 48, 64]
             # self.de_channels = [self.mot_en_channels[-1] + self.body_en_channels[-1], 128, 64, self.len_joints + 2]
