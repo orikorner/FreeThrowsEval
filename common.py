@@ -53,7 +53,7 @@ class Config:
     # footvel_loss_weight = 0.1
 
     nr_epochs = 20
-    batch_size = 4
+    batch_size = 8
     num_workers = 0  # TODO
     lr = 1e-3
 
@@ -76,6 +76,8 @@ class Config:
         if True: #self.name == 'skeleton':
             self.mot_en_channels = [self.len_joints + 2, 64, 96, 128]
             self.body_en_channels = [self.len_joints, 32, 48, 64]
+            # self.mot_en_channels = [self.len_joints + 2, 96, 128, 192]
+            # self.body_en_channels = [self.len_joints, 64, 96, 128]
             # self.de_channels = [self.mot_en_channels[-1] + self.body_en_channels[-1], 128, 64, self.len_joints + 2]
             # self.view_angles = None
 

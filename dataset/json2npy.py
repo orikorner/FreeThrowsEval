@@ -1,4 +1,4 @@
-from utils.operators import openpose2motion
+# from utils.operators import openpose2motion
 from scipy.ndimage import gaussian_filter1d
 import json
 import os
@@ -28,7 +28,6 @@ def parse_args():
     parser.add_argument('--data-dir', type=str, help='fpath to dataset dir')
     parser.add_argument('--checkpoint', type=str, help='fpath to mask rcnn model weights')
     parser.add_argument('--num-samples', type=int, default=5, help='Num of frames to sample for ft shooter detection')
-    parser.add_argument('--num-frames', type=int, default=40, help='Num of frames to take for output')
     parser.add_argument('--w-smooth', action='store_true', default=False, help='whether to smooth motion')
 
     args = parser.parse_args()
@@ -191,37 +190,157 @@ def prepare_model(state_dict):
     return model
 
 
+def calc_two_poses_dist(pose1, pose2):
+    dist = 0
+    for joint_idx in range(len(pose1)):
+        # Comparing non 0 valued joints
+        if pose1[joint_idx][0] != 0 and pose2[joint_idx][0] != 0:
+            dist += np.abs(pose1[joint_idx][0] - pose2[joint_idx][0]) + \
+                                np.abs(pose1[joint_idx][1] - pose2[joint_idx][1])
+    return dist
+
+
+def find_closest_pose_numpy(np_poses_arr, target_pose):
+    curr_min = 100000
+    closest_pose = None
+    for curr_person_joints in np_poses_arr:
+        curr_person_dist = calc_two_poses_dist(curr_person_joints, target_pose)
+        if curr_person_dist < curr_min:
+            curr_min = curr_person_dist
+            closest_pose = curr_person_joints
+
+    assert curr_min < 100000
+    assert closest_pose is not None
+    return closest_pose
+
+
+def find_closest_pose(poses_arr, target_pose):
+    curr_min = 100000
+    closest_pose = None
+    for person_pose_info in poses_arr:
+        curr_person_joints = np.array(person_pose_info['pose_keypoints_2d']).reshape((-1, 3))[:15, :2]
+        curr_person_dist = calc_two_poses_dist(curr_person_joints, target_pose)
+        if curr_person_dist < curr_min:
+            curr_min = curr_person_dist
+            closest_pose = curr_person_joints
+
+    assert curr_min < 100000
+    assert closest_pose is not None
+    return closest_pose
+
+
+def fill_zero_joints(joint_motion):
+    # Handling first frame
+    if joint_motion[0][0] == 0:
+        for t in range(1, len(joint_motion)):
+            if joint_motion[t][0] != 0:
+                joint_motion[0][0] = joint_motion[t][0]
+                joint_motion[0][1] = joint_motion[t][1]
+                break
+    assert joint_motion[0][0] != 0 and joint_motion[0][1] != 0
+
+    # Handling last frame
+    if joint_motion[len(joint_motion) - 1][0] == 0:
+        for t in range(len(joint_motion) - 2, 0, -1):
+            if joint_motion[t][0] != 0:
+                joint_motion[len(joint_motion) - 1][0] = joint_motion[t][0]
+                joint_motion[len(joint_motion) - 1][1] = joint_motion[t][1]
+                break
+
+    assert joint_motion[len(joint_motion) - 1][0] != 0 and joint_motion[len(joint_motion) - 1][1] != 0
+
+    for i in range(len(joint_motion)):
+        if joint_motion[i][0] == 0:
+            last_good_joint = joint_motion[i - 1]
+            next_good_joint = None
+            zeros_count = 1
+            for j in range(i + 1, len(joint_motion)):
+                if joint_motion[j][0] == 0:
+                    zeros_count += 1
+                else:
+                    next_good_joint = joint_motion[j]
+                    break
+
+            step_size_x = (next_good_joint[0] - last_good_joint[0]) / (zeros_count + 1)
+            step_size_y = (next_good_joint[1] - last_good_joint[1]) / (zeros_count + 1)
+            for k in range(zeros_count):
+                assert joint_motion[i + k][0] == 0 and joint_motion[i + k][1] == 0
+                joint_motion[i + k][0] = last_good_joint[0] + step_size_x * (k + 1)
+                joint_motion[i + k][1] = last_good_joint[1] + step_size_y * (k + 1)
+
+    for i in range(len(joint_motion)):
+        if joint_motion[i][0] == 0:
+            raise ValueError('!!!!!! STILL HAS 0 IN MOTION !!!!!!!!!!!!!!!!!!!!!!!')
+
+    return joint_motion.T
+
+
 def is_point_in_rectangle(rectangle, point, name=None):
-    if rectangle[0] < point[0] < rectangle[2] and rectangle[1] < point[1] < rectangle[3]:
+    """ Returns True if the given point=(X,Y) is inside the rectangle """
+    if point[0] != 0 and \
+            rectangle[0] < point[0] < rectangle[2] and rectangle[1] < point[1] < rectangle[3]:
         if name is not None:
             print(name)
         return True
     return False
 
 
-def count_main_joints_in_box(bounding_box, joints):
-    parts = [joints[0], joints[2], joints[5], joints[8], joints[9], joints[12]]  # head, r arm, l arm, hips, ru leg, lu leg
+def num_points_in_rectangle(rectangle, points):
+    """ Returns True if exists a point in the points list that is inside the rectangle """
     cnt_in = 0
-    for part in parts:
-        if is_point_in_rectangle(bounding_box, part):
+    for point in points:
+        if is_point_in_rectangle(rectangle, point):
             cnt_in += 1
     return cnt_in
 
 
-def openpose2motionv2(json_dir, ft_bounding_box, scale=1.0, smooth=True, max_frame=None):
-    length = max_frame - 1
+def num_main_joints_in_box(bounding_box, joints):
+    """
+    Checking that Head, Right Arm, Left Arm, Hips, Right Upper Leg and Left Upper Leg are inside the bounding box
+    and in the correct positing inside
+    """
+    head = joints[0]
+    neck = joints[1]
+    hips = joints[8]
+    r_leg = joints[9]
+    l_leg = joints[12]
+    box_vert_len = np.abs(bounding_box[3] - bounding_box[1])
+    box_horz_len = np.abs(bounding_box[2] - bounding_box[0])
+    trimmed_box_max_y = bounding_box[1] + (box_vert_len * 0.35)
+    trimmed_box_min_y = bounding_box[3] - (box_vert_len * 0.35)
+    extended_box_min_x = bounding_box[0] - (box_horz_len * 0.18)
+    extended_box_max_x = bounding_box[2] + (box_horz_len * 0.18)
+    hips_based_box = [extended_box_min_x, trimmed_box_max_y, extended_box_max_x, bounding_box[3]]
+    head_based_box = [extended_box_min_x, bounding_box[1], extended_box_max_x, trimmed_box_min_y]
+    if num_points_in_rectangle(hips_based_box, [hips, l_leg, r_leg]) > 0 and \
+            num_points_in_rectangle(head_based_box, [head, neck]) > 0:
+        return True
+    return False
+
+
+def count_joints_in_box(bounding_box, joints):
+    cnt_in = num_main_joints_in_box(bounding_box, joints)
+    non_main_joints_indices = [2, 3, 4, 5, 6, 7, 10, 11, 13, 14]
+    for i_joint in range(len(non_main_joints_indices)):
+        if is_point_in_rectangle(bounding_box, joints[i_joint]):
+            cnt_in += 1
+    return cnt_in
+
+
+def openpose2motionv2(json_dir, ft_bounding_box, scale=1.0, smooth=True):
+
     json_files = sorted(os.listdir(json_dir))
     json_files = [osp.join(json_dir, x) for x in json_files]
 
-    box_vert_len = np.abs(ft_bounding_box[3] - ft_bounding_box[1])
-    box_horz_len = np.abs(ft_bounding_box[2] - ft_bounding_box[0])
-    trimmed_box_max_y = ft_bounding_box[1] + (box_vert_len * 0.35)
-    trimmed_box_min_y = ft_bounding_box[3] - (box_vert_len * 0.35)
-    extended_box_min_x = ft_bounding_box[0] - (box_horz_len * 0.18)
-    extended_box_max_x = ft_bounding_box[2] + (box_horz_len * 0.18)
-    hips_based_box = [extended_box_min_x, trimmed_box_max_y, extended_box_max_x, ft_bounding_box[3]]
-    head_based_box = [extended_box_min_x, ft_bounding_box[1], extended_box_max_x, trimmed_box_min_y]
-    box_center = (0.25 * (ft_bounding_box[0] + ft_bounding_box[2]), 0.25 * (ft_bounding_box[1] + ft_bounding_box[3]))
+    # box_vert_len = np.abs(ft_bounding_box[3] - ft_bounding_box[1])
+    # box_horz_len = np.abs(ft_bounding_box[2] - ft_bounding_box[0])
+    # trimmed_box_max_y = ft_bounding_box[1] + (box_vert_len * 0.35)
+    # trimmed_box_min_y = ft_bounding_box[3] - (box_vert_len * 0.35)
+    # extended_box_min_x = ft_bounding_box[0] - (box_horz_len * 0.18)
+    # extended_box_max_x = ft_bounding_box[2] + (box_horz_len * 0.18)
+    # hips_based_box = [extended_box_min_x, trimmed_box_max_y, extended_box_max_x, ft_bounding_box[3]]
+    # head_based_box = [extended_box_min_x, ft_bounding_box[1], extended_box_max_x, trimmed_box_min_y]
+    # box_center = (0.25 * (ft_bounding_box[0] + ft_bounding_box[2]), 0.25 * (ft_bounding_box[1] + ft_bounding_box[3]))
     motion = []
     for j, path in enumerate(json_files):
         with open(path) as f:
@@ -230,57 +349,124 @@ def openpose2motionv2(json_dir, ft_bounding_box, scale=1.0, smooth=True, max_fra
             joint_candidate = []
             for i, person_pose_info in enumerate(people_poses_arr):
                 curr_joint = np.array(person_pose_info['pose_keypoints_2d']).reshape((-1, 3))[:15, :2]
-                top_check_pass = False
-                bottom_check_pass = False
-                curr_hips = curr_joint[8]
-                curr_r_leg = curr_joint[9]
-                curr_l_leg = curr_joint[12]
-                curr_head = curr_joint[0]
-                curr_neck = curr_joint[1]
-                if curr_hips[0] != 0 and is_point_in_rectangle(hips_based_box, curr_hips) or \
-                        curr_l_leg[0] != 0 and is_point_in_rectangle(hips_based_box, curr_l_leg) or \
-                        curr_r_leg[0] != 0 and is_point_in_rectangle(hips_based_box, curr_r_leg):
-                    bottom_check_pass = True
-
-                if bottom_check_pass:
-                    if curr_head[0] != 0 and is_point_in_rectangle(head_based_box, curr_head) or \
-                            curr_neck[0] != 0 and is_point_in_rectangle(head_based_box, curr_neck):
-                        top_check_pass = True
-
-                if top_check_pass and bottom_check_pass:
-                    if len(motion) > 0:
-                        # fills joints with 0 value to be the same as their previous value (in previous frame)
-                        curr_joint[np.where(curr_joint == 0)] = motion[-1][np.where(curr_joint == 0)]
+                # TODO handle confidences?
+                if num_main_joints_in_box(ft_bounding_box, curr_joint) > 0:
                     joint_candidate.append(curr_joint)
+                # top_check_pass = False
+                # bottom_check_pass = False
+                #
+                # curr_hips = curr_joint[8]
+                # curr_r_leg = curr_joint[9]
+                # curr_l_leg = curr_joint[12]
+                # curr_head = curr_joint[0]
+                # curr_neck = curr_joint[1]
+                # if curr_hips[0] != 0 and is_point_in_rectangle(hips_based_box, curr_hips) or \
+                #         curr_l_leg[0] != 0 and is_point_in_rectangle(hips_based_box, curr_l_leg) or \
+                #         curr_r_leg[0] != 0 and is_point_in_rectangle(hips_based_box, curr_r_leg):
+                #     bottom_check_pass = True
+                #
+                # if bottom_check_pass:
+                #     if curr_head[0] != 0 and is_point_in_rectangle(head_based_box, curr_head) or \
+                #             curr_neck[0] != 0 and is_point_in_rectangle(head_based_box, curr_neck):
+                #         top_check_pass = True
 
-            if len(joint_candidate) > 0:
-                if len(joint_candidate) > 1:
-                    print(f'Longer than 1 pose detected in frame: {j}')
-                    if len(motion) == 0:
-                        joint_candidate.sort(
-                            key=lambda p: np.abs(p[8][0] - box_center[0]) + np.abs(p[8][1] - box_center[1]) +
-                                          np.abs(p[0][0] - box_center[0]) + np.abs(p[0][1] - box_center[1]))
+                # if top_check_pass and bottom_check_pass:
+                #     joint_candidate.append(curr_joint)
+
+            selected_pose = None
+            if len(joint_candidate) == 1:
+                if len(motion) > 0:
+                    # We need to verify we didn't get the wrong person because after shot release players move around
+                    dist_from_prev = calc_two_poses_dist(motion[-1], joint_candidate[0])
+                    if dist_from_prev > 400:
+                        selected_pose = find_closest_pose(people_poses_arr, motion[-1])
+                        # motion.append(closest_person_joints)
                     else:
-                        last_hips = np.array(motion[-1][8])
-                        last_head = motion[-1][0]
-                        joint_candidate.sort(
-                            key=lambda p: np.abs(p[8][0] - last_hips[0]) + np.abs(p[8][1] - last_hips[1]) +
-                                          np.abs(p[0][0] - last_head[0]) + np.abs(p[0][1] - last_head[1]))
-
-                motion.append(joint_candidate[0])
+                        selected_pose = joint_candidate[0]
+                        # motion.append(joint_candidate[0])
+                    # print(f'Frame idx: {j}, Dist: {dist_from_prev}')
+                else:
+                    # First Frame case
+                    selected_pose = joint_candidate[0]
+                    # motion.append(joint_candidate[0])
+            elif len(joint_candidate) == 0:
+                if len(motion) > 0:
+                    # Did not find any ft shooter but found in previous frame
+                    selected_pose = find_closest_pose(people_poses_arr, motion[-1])
+                    # motion.append(closest_person_joints)
+                else:
+                    print(f'!!!!!!!!! Did not find any ft shooters in frame {j} And Motion is Empty !!!!!!!!!')
             else:
-                length += 1
+                # More than 1 pose (main joints) found in ft shooter bounding box
+                if len(motion) > 0:
+                    selected_pose = find_closest_pose_numpy(joint_candidate, motion[-1])
+                    # motion.append(closest_person_joints)
+                else:
+                    # First Frame case, but found multiple ft shooters - we now look at all of their joints
+                    max_num_inside_joints = 0
+                    # max_joints_pose = None
+                    for curr_joint_candidate in joint_candidate:
+                        curr_num_inside_joints = count_joints_in_box(ft_bounding_box, curr_joint_candidate)
+                        if curr_num_inside_joints > max_num_inside_joints:
+                            max_num_inside_joints = curr_num_inside_joints
+                            selected_pose = curr_joint_candidate
+                    # motion.append(max_joints_pose)
+            if selected_pose is not None:
+                motion.append(selected_pose)
+            else:
+                print(f'!!!!!!!!! Selected pose is None in frame {j} !!!!!!!!!')
+            #
+            # if len(joint_candidate) > 0:
+            #     if len(joint_candidate) > 1:
+            #         print(f'Longer than 1 pose detected in frame: {j}')
+            #         if len(motion) > 0:
+            #             closest_person_joints = find_closest_pose_numpy(joint_candidate, motion[-1])
+            #             motion.append(closest_person_joints)
+            #         else:
+            #             print(f'Motion Length is 0 in frame: {j}')
+            #             # First Frame
+            #             max_num_inside_joints = 0
+            #             max_joints_pose = None
+            #             for curr_joint_candidate in joint_candidate:
+            #                 curr_num_inside_joints = num_main_joints_in_box(ft_bounding_box, curr_joint_candidate)
+            #                 if curr_num_inside_joints > max_num_inside_joints:
+            #                     max_num_inside_joints = curr_num_inside_joints
+            #                     max_joints_pose = curr_joint_candidate
+            #             motion.append(max_joints_pose)
+            #             # joint_candidate.sort(
+            #             #     key=lambda p: np.abs(p[8][0] - box_center[0]) + np.abs(p[8][1] - box_center[1]) +
+            #             #                   np.abs(p[0][0] - box_center[0]) + np.abs(p[0][1] - box_center[1]))
+            #             # motion.append(joint_candidate[0])
+            #     else:
+            #         if len(motion) > 0:
+            #             dist_from_prev = calc_two_poses_dist(motion[-1], joint_candidate[0])
+            #             if dist_from_prev > 400:
+            #                 closest_person_joints = find_closest_pose(people_poses_arr, motion[-1])
+            #                 motion.append(closest_person_joints)
+            #             else:
+            #                 motion.append(joint_candidate[0])
+            #             # print(f'Frame idx: {j}, Dist: {dist_from_prev}')
+            #         else:
+            #             motion.append(joint_candidate[0])
+            # elif len(motion) > 0:
+            #     # Did not find any ft shooter but found in previous frame
+            #     closest_person_joints = find_closest_pose(people_poses_arr, motion[-1])
+            #     motion.append(closest_person_joints)
+            # else:
+            #     print(f'!!!!!!!!! Did not find any ft shooters in frame {j} - Probably because first frame !!!!!!!!!')
 
-        if j >= length:
-            break
-
-    # if len(motion) != max_frame:
-    #     print(f'!!!!!!! len_mot: {len(motion)} - mf: {max_frame}')
-    
-    for i in range(len(motion) - 1, 0, -1):
-        motion[i - 1][np.where(motion[i - 1] == 0)] = motion[i][np.where(motion[i - 1] == 0)]
+    # Perform interpolation to remedy zeros
+    max_dist = 0
+    for i in range(len(motion) - 1):
+        final_dist_from_prev = calc_two_poses_dist(motion[i], motion[i + 1])
+        if final_dist_from_prev > max_dist:
+            max_dist = final_dist_from_prev
+    print(f'Motion Max Dist: {max_dist}')
 
     motion = np.stack(motion, axis=2)
+
+    for i in range(len(motion)):
+        motion[i] = fill_zero_joints(motion[i].T)
 
     if smooth:
         motion = gaussian_filter1d(motion, sigma=2, axis=-1)
@@ -295,11 +481,17 @@ def openpose2motionv2(json_dir, ft_bounding_box, scale=1.0, smooth=True, max_fra
     #             zeros_joints.append(jj)
     # if zeros_cnt > 0:
     #     print(f'{zeros_cnt} + {zeros_joints}')
+    # print(len(json_files))
+    # a,b,c = motion.shape
+    # print(motion.shape)
+    # for i in range(c):
+    #     for j in range(15):
+    #         print(f'({motion[j][0][i]}, {motion[j][1][i]})', end=' ')
+    #     print()
     return motion
 
 
-def json2npy(data_dir, state_dict, num_samples, num_frames, smooth):
-    work_num_frames = num_frames
+def json2npy(data_dir, state_dict, num_samples, smooth):
     # preparing model
     model = prepare_model(state_dict)
     clips_dir_fpath = osp.join(data_dir, CLIPS_DIR)
@@ -309,6 +501,8 @@ def json2npy(data_dir, state_dict, num_samples, num_frames, smooth):
     for i, clip_name in enumerate(vids_kp_dirs):
         print(f'====== {i} - {clip_name} =====')
         # First we need to find the ft shooter in clip (bounding box)
+        # if clip_name != '7':
+        #     continue
         curr_clip_fpath = osp.join(clips_dir_fpath, clip_name)
         curr_clip_fpath = f'{curr_clip_fpath}.mp4'
         ft_bounding_box = locate_ft_shooter_in_clip(model, curr_clip_fpath, num_samples=num_samples, num_frames=50)
@@ -318,13 +512,10 @@ def json2npy(data_dir, state_dict, num_samples, num_frames, smooth):
         # Second we extract all poses into a matrix
         clip_joints_dir_fpath = osp.join(joints_dir_fpath, clip_name)
         joints_json_files = os.listdir(clip_joints_dir_fpath)
-        if num_frames == -1:
-            work_num_frames = len(joints_json_files)
-        else:
-            work_num_frames = min(len(joints_json_files), num_frames)
-            assert num_frames == work_num_frames
+
+        # work_num_frames = len(joints_json_files)
         # num_frames = len(joints_json_files)
-        motion = openpose2motionv2(clip_joints_dir_fpath, ft_bounding_box, max_frame=work_num_frames, smooth=smooth)
+        motion = openpose2motionv2(clip_joints_dir_fpath, ft_bounding_box, smooth=smooth)
         # returned motion shape is (J, 2, max_frame) and belongs to the free throws shooter
         # Here i am saving a matrix representing motion in 40 frames
         save_fpath = osp.join(out_dir, clip_name)
@@ -335,4 +526,4 @@ def json2npy(data_dir, state_dict, num_samples, num_frames, smooth):
 
 if __name__ == '__main__':
     args = parse_args()
-    json2npy(args.data_dir, args.checkpoint, args.num_samples, args.num_frames, args.w_smooth)
+    json2npy(args.data_dir, args.checkpoint, args.num_samples, args.w_smooth)

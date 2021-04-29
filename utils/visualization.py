@@ -55,6 +55,8 @@ def plot_classes_preds(outputs, vid_names, images, labels):
     Uses the "images_to_probs" function.
     '''
     preds, probs = images_to_probs(outputs, images)
+    # print(labels)
+    print(preds)
     # print('=============')
     # print(vid_names)
     # print(labels.reshape(-1))
@@ -62,7 +64,9 @@ def plot_classes_preds(outputs, vid_names, images, labels):
     # print(probs)
     # print('=============')
     correct = np.logical_not(np.logical_xor(np.array(preds), labels.reshape(-1).numpy())).sum()
+    print(correct)
     print(f'Accuracy: {correct / len(labels):.3}')
+
 
     dummy_mat = [(np.random.rand(28, 28) - 0.5) / 0.5 for ii in range(len(labels))]
     # dummy_mat = [np.random.randn(28, 28) for ii in range(len(labels))]
@@ -297,14 +301,15 @@ if __name__ == '__main__':
     color3 = hex2rgb('#ff8b06#ffb431#ffcd9d')
     colors = [color1, color2, color3]
 
-    for i, curr_item in enumerate(zip(joints, clips)):
-        curr_joints, curr_clip = curr_item
+    for i, curr_clip_name in enumerate(clips):
 
-        curr_out_name = osp.join(args.out_dir, curr_clip)
+        curr_motion_name = f'{curr_clip_name.split(".")[0]}.npy'
 
-        motion = np.load(osp.join(args.joints_dir, curr_joints))
+        curr_out_name = osp.join(args.out_dir, curr_clip_name)
+        
+        motion = np.load(osp.join(args.joints_dir, curr_motion_name))
 
-        capture = cv2.VideoCapture(osp.join(args.clips_dir, curr_clip))
+        capture = cv2.VideoCapture(osp.join(args.clips_dir, curr_clip_name))
         width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
         length = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -312,11 +317,12 @@ if __name__ == '__main__':
 
         if width > 1000 and height > 700:
             if fps < 24 or fps > 25:
-                print(f'{curr_clip} - FPS: {fps}')
+                print(f'{curr_clip_name} - FPS: {fps}')
+            motion = motion[:, :, :length - 20]
             motion2video(motion, height, width, curr_out_name, color1,
                          transparency=False, motion_tgt=None, fps=fps, save_frame=False)
         else:
-            print(f'{curr_clip} - W: {width} , H: {height}')
+            print(f'{curr_clip_name} - W: {width} , H: {height}')
 
         capture.release()
         print(f'====== Finished {i} ======')

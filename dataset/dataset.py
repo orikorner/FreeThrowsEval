@@ -40,7 +40,7 @@ class BBFTSDataset(Dataset):
 
         vid_fpath = osp.join(self.data_fpath, f'{vid_name}.npy')
         motion = np.load(vid_fpath)
-
+        motion = motion[:, :, :45]
         motion = self.preprocessing(motion)
 
         sample = {'name': vid_name, 'motion': motion, 'label': label}
@@ -124,6 +124,7 @@ def gen_meanpose(config):
 
     for path in all_paths:
         motion2d = np.load(path)
+        motion2d = motion2d[:, :, :45]
         motion2d_preprocessed = trans_motion2d(motion2d)
         all_joints.append(motion2d_preprocessed)
         # local3d = None

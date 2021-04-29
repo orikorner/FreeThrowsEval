@@ -3,6 +3,26 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+# def init_weights(m):
+#     if type(m) == nn.Linear:
+#         torch.nn.init.xavier_uniform(m.weight)
+#         m.bias.data.fill_(0.01)
+#
+
+def init_weights(m):
+    if isinstance(m, nn.Conv1d):
+        nn.init.normal_(m.weight, 0.0, 0.02)
+        m.bias.data.fill_(0.01)
+    elif isinstance(m, nn.Linear):
+        print("IN LINEAR")
+        exit()
+        nn.init.xavier_uniform_(m.weight)
+        m.bias.data.fill_(0.01)
+    # elif isinstance(m, nn.BatchNorm2d):
+    #     nn.init.normal_(m.weight, 0.0, 0.02)
+    #     nn.init.constant_(m.bias, 0)
+
+
 class PrintLayer(nn.Module):
     def __init__(self, layer_name, msg, is_header=False, dbg_mode=False):
         super(PrintLayer, self).__init__()
@@ -33,6 +53,7 @@ class Encoder(nn.Module):
 
         model = []
         acti = nn.LeakyReLU(0.2)
+        # acti = nn.Sigmoid()
 
         nr_layer = len(channels) - 2 if compress else len(channels) - 1
 
@@ -105,9 +126,20 @@ class FtNet(nn.Module):
 
         model = []
         # here we assert num channles of first part matches second part
-        self.mot_encoder = Encoder(mot_en_channels, kernel_size=3, dbg_mode=dbg_mode)
-        self.static_encoder = Encoder(body_en_channels, kernel_size=3, global_pool=global_pool, convpool=convpool,
+        self.mot_encoder = Encoder(mot_en_channels, kernel_size=5, dbg_mode=dbg_mode)
+        self.static_encoder = Encoder(body_en_channels, kernel_size=5, global_pool=global_pool, convpool=convpool,
                                       compress=compress, dbg_mode=dbg_mode)
+        # for name, param in self.mot_encoder.named_parameters():
+        #     if param.requires_grad:
+        #         print(name, param.data)
+        #         break
+        # self.mot_encoder.apply(init_weights)
+        # for name, param in self.mot_encoder.named_parameters():
+        #     if param.requires_grad:
+        #         print(name, param.data)
+        #         break
+        # exit()
+        # self.static_encoder.apply(init_weights)
         self.mot_pooling = nn.AdaptiveAvgPool2d((None, 4))
         self.fc1 = nn.Linear(768, 192)
         self.fc2 = nn.Linear(192, 48)
@@ -119,7 +151,8 @@ class FtNet(nn.Module):
         self.fc1_print = PrintLayer(layer_name='Fully Connected 1', msg='Output Shape Is', dbg_mode=dbg_mode)
         self.fc2_print = PrintLayer(layer_name='Fully Connected 2', msg='Output Shape Is', dbg_mode=dbg_mode)
         self.fc3_print = PrintLayer(layer_name='Fully Connected 3', msg='Output Shape Is', dbg_mode=dbg_mode)
-
+        self.lin_act = F.relu
+        # self.lin_act = nn.Sigmoid()
     # def cross(self, x1, x2):
     #     m1 = self.mot_encoder(x1)
     #     b1 = self.static_encoder(x1[:, :-2, :])
@@ -172,22 +205,22 @@ class FtNet(nn.Module):
     def forward(self, x):
         mot_out = self.mot_encoder(x)
         mot_out = self.mot_encoder_print(mot_out)
-        # print(f'm shape is: {m.shape}')
-        mot_out = self.mot_pooling(mot_out)
-        mot_out = self.mot_pooling_print(mot_out)
-        # print(f'm shape is: {m.shape}')
+        # print(f'm shape is: {mot_out.shape}')
+        # mot_out = self.mot_pooling(mot_out)
+        # mot_out = self.mot_pooling_print(mot_out)
+        # print(f'm shape is: {mot_out.shape}')
         stat_out = self.static_encoder(x[:, :-2, :])  # 2 coords belong to Velocity of hips between consecutive frames
         stat_out = self.static_encoder_print(stat_out)
-        # print(f'b shape is: {b.shape}')
+        # print(f'b shape is: {stat_out.shape}')
         stat_out = stat_out.repeat(1, 1, mot_out.shape[-1])
         # print(f'b after repeat shape is: {b.shape}')
         feat_map = torch.cat([mot_out, stat_out], dim=1)
         # print(f'd shape is: {d.shape}')
         feat_map = feat_map.view(-1, 768)
         # print(f'd shape after view is: {d.shape}')
-        fc_out = F.relu(self.fc1(feat_map))
+        fc_out = self.lin_act(self.fc1(feat_map))
         fc_out = self.fc1_print(fc_out)
-        fc_out = F.relu(self.fc2(fc_out))
+        fc_out = self.lin_act(self.fc2(fc_out))
         fc_out = self.fc2_print(fc_out)
         fc_out = self.fc3(fc_out)
         fc_out = self.fc3_print(fc_out)
