@@ -52,13 +52,13 @@ class Config:
     # foot_idx = [20, 21, 26, 27]
     # footvel_loss_weight = 0.1
 
-    nr_epochs = 20
-    batch_size = 8
+    nr_epochs = 70
+    batch_size = 16
     num_workers = 0  # TODO
     lr = 1e-3
 
     save_frequency = 25
-    val_frequency = 10
+    val_frequency = 4
 
     def initialize(self, args):
         self.name = args.name if hasattr(args, 'name') else 'skeleton'

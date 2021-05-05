@@ -46,6 +46,25 @@ def images_to_probs(outputs, images):
     return preds, [F.softmax(el, dim=0)[i].item() for i, el in zip(preds, outputs)]
 
 
+def get_predictions(outputs, vid_names, images, labels, w_print=True):
+    preds, probs = images_to_probs(outputs, images)
+    labels = labels.reshape(-1).numpy()
+    correct = np.logical_not(np.logical_xor(np.array(preds), labels)).sum()
+    num_ones = 0
+    for i in range(len(labels)):
+        if preds[i] == 1 and labels[i] == 1:
+            num_ones += 1
+
+    if w_print:
+        print()
+        # print(f'Confidences: {["{0:0.2f}".format(x) for x in probs]}')
+        print(f'Predcts:     {preds}')
+        print(f'Lables:      {labels}')
+
+        print(f'Accuracy: {correct}/{len(labels)} ({correct / len(labels):.3}) Correct Made Shots: {num_ones}/{correct}')
+    return preds, probs, correct
+
+
 def plot_classes_preds(outputs, vid_names, images, labels):
     '''
     Generates matplotlib Figure using a trained network, along with images
@@ -54,19 +73,7 @@ def plot_classes_preds(outputs, vid_names, images, labels):
     information based on whether the prediction was correct or not.
     Uses the "images_to_probs" function.
     '''
-    preds, probs = images_to_probs(outputs, images)
-    # print(labels)
-    print(preds)
-    # print('=============')
-    # print(vid_names)
-    # print(labels.reshape(-1))
-    # print(preds)
-    # print(probs)
-    # print('=============')
-    correct = np.logical_not(np.logical_xor(np.array(preds), labels.reshape(-1).numpy())).sum()
-    print(correct)
-    print(f'Accuracy: {correct / len(labels):.3}')
-
+    preds, probs, correct = get_predictions(outputs, vid_names, images, labels)
 
     dummy_mat = [(np.random.rand(28, 28) - 0.5) / 0.5 for ii in range(len(labels))]
     # dummy_mat = [np.random.randn(28, 28) for ii in range(len(labels))]
@@ -305,8 +312,11 @@ if __name__ == '__main__':
 
         curr_motion_name = f'{curr_clip_name.split(".")[0]}.npy'
 
+        if curr_motion_name != '77.npy':
+            continue
+
         curr_out_name = osp.join(args.out_dir, curr_clip_name)
-        
+
         motion = np.load(osp.join(args.joints_dir, curr_motion_name))
 
         capture = cv2.VideoCapture(osp.join(args.clips_dir, curr_clip_name))

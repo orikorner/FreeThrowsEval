@@ -124,7 +124,8 @@ class FtNet(nn.Module):
 
         self.dbg_mode = dbg_mode
 
-        model = []
+        self.data_bn = nn.BatchNorm1d(mot_en_channels[0] * 1)
+        # model = []
         # here we assert num channles of first part matches second part
         self.mot_encoder = Encoder(mot_en_channels, kernel_size=5, dbg_mode=dbg_mode)
         self.static_encoder = Encoder(body_en_channels, kernel_size=5, global_pool=global_pool, convpool=convpool,
@@ -141,6 +142,7 @@ class FtNet(nn.Module):
         # exit()
         # self.static_encoder.apply(init_weights)
         self.mot_pooling = nn.AdaptiveAvgPool2d((None, 4))
+        # self.conv2_out = nn.Conv2d(768, 2, kernel_size=1)
         self.fc1 = nn.Linear(768, 192)
         self.fc2 = nn.Linear(192, 48)
         self.fc3 = nn.Linear(48, 2)
@@ -203,6 +205,8 @@ class FtNet(nn.Module):
     #     return outputs, motionvecs, bodyvecs
 
     def forward(self, x):
+        x = self.data_bn(x)
+
         mot_out = self.mot_encoder(x)
         mot_out = self.mot_encoder_print(mot_out)
         # print(f'm shape is: {mot_out.shape}')
@@ -211,18 +215,27 @@ class FtNet(nn.Module):
         # print(f'm shape is: {mot_out.shape}')
         stat_out = self.static_encoder(x[:, :-2, :])  # 2 coords belong to Velocity of hips between consecutive frames
         stat_out = self.static_encoder_print(stat_out)
-        # print(f'b shape is: {stat_out.shape}')
+        # print(f'stat_out shape is: {stat_out.shape}')
         stat_out = stat_out.repeat(1, 1, mot_out.shape[-1])
-        # print(f'b after repeat shape is: {b.shape}')
+        # print(f'stat_out after repeat shape is: {stat_out.shape}')
         feat_map = torch.cat([mot_out, stat_out], dim=1)
-        # print(f'd shape is: {d.shape}')
+        # print(f'd shape is: {feat_map.shape}')
+
         feat_map = feat_map.view(-1, 768)
-        # print(f'd shape after view is: {d.shape}')
+        # print(f'd shape after view is: {feat_map.shape}')
         fc_out = self.lin_act(self.fc1(feat_map))
         fc_out = self.fc1_print(fc_out)
         fc_out = self.lin_act(self.fc2(fc_out))
         fc_out = self.fc2_print(fc_out)
         fc_out = self.fc3(fc_out)
         fc_out = self.fc3_print(fc_out)
-        # d = self.decoder(d)
+
+        # feat_map = feat_map.reshape(-1, 768)
+        # feat_map.unsqueeze_(2)
+        # feat_map.unsqueeze_(3)
+        # fc_out = self.conv2_out(feat_map)
+        # fc_out.squeeze_(3)
+        # fc_out.squeeze_(2)
+
+
         return fc_out

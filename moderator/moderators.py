@@ -8,7 +8,7 @@ import os.path as osp
 
 
 class Moderator(object):
-    def __init__(self, config, net):
+    def __init__(self, config, net, lr):
         # self.inputs_name = ['input1', 'input2', 'input12', 'input21']
         # self.targets_name = ['target1', 'target2', 'target12', 'target21']
 
@@ -29,7 +29,7 @@ class Moderator(object):
         self.cross_ent_loss = nn.CrossEntropyLoss() # TODO: .to(self.device)
 
         # set optimizer
-        self.optimizer = optim.Adam(self.net.parameters(), config.lr)
+        self.optimizer = optim.Adam(self.net.parameters(), lr)
         self.scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, 0.99)
 
     def forward(self, data):
@@ -90,7 +90,7 @@ class Moderator(object):
         self.optimizer.step()
 
     def update_learning_rate(self):
-        self.scheduler.step(self.clock.epoch)
+        self.scheduler.step()
         # self.scheduler.step(self.curr_epoch)
 
     def train_func(self, data):

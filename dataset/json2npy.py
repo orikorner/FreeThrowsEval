@@ -236,6 +236,7 @@ def fill_zero_joints(joint_motion):
             if joint_motion[t][0] != 0:
                 joint_motion[0][0] = joint_motion[t][0]
                 joint_motion[0][1] = joint_motion[t][1]
+                print('FIRST')
                 break
     assert joint_motion[0][0] != 0 and joint_motion[0][1] != 0
 
@@ -245,6 +246,7 @@ def fill_zero_joints(joint_motion):
             if joint_motion[t][0] != 0:
                 joint_motion[len(joint_motion) - 1][0] = joint_motion[t][0]
                 joint_motion[len(joint_motion) - 1][1] = joint_motion[t][1]
+                print('Last')
                 break
 
     assert joint_motion[len(joint_motion) - 1][0] != 0 and joint_motion[len(joint_motion) - 1][1] != 0
@@ -455,7 +457,6 @@ def openpose2motionv2(json_dir, ft_bounding_box, scale=1.0, smooth=True):
             # else:
             #     print(f'!!!!!!!!! Did not find any ft shooters in frame {j} - Probably because first frame !!!!!!!!!')
 
-    # Perform interpolation to remedy zeros
     max_dist = 0
     for i in range(len(motion) - 1):
         final_dist_from_prev = calc_two_poses_dist(motion[i], motion[i + 1])
@@ -465,8 +466,22 @@ def openpose2motionv2(json_dir, ft_bounding_box, scale=1.0, smooth=True):
 
     motion = np.stack(motion, axis=2)
 
+    # Perform interpolation to remedy zeros
+    # test_motion = motion.copy()
+
     for i in range(len(motion)):
         motion[i] = fill_zero_joints(motion[i].T)
+
+    # j_dim, xy, n_fr = motion.shape
+    # for t in range(n_fr):
+    #     print('\n--------------------------------------------------------------')
+    #     for j_idx in range(j_dim):
+    #         if j_idx in [2,3,4,5,6,7]:
+    #             print(f'({int(np.round(test_motion[j_idx, 0, t]))},{int(np.round(test_motion[j_idx, 1, t]))})', end=',')
+    #     print()
+    #     for j_idx in range(j_dim):
+    #         if j_idx in [2, 3, 4, 5, 6, 7]:
+    #             print(f'({int(np.round(motion[j_idx, 0, t]))},{int(np.round(motion[j_idx, 1, t]))})', end=',')
 
     if smooth:
         motion = gaussian_filter1d(motion, sigma=2, axis=-1)
@@ -501,7 +516,7 @@ def json2npy(data_dir, state_dict, num_samples, smooth):
     for i, clip_name in enumerate(vids_kp_dirs):
         print(f'====== {i} - {clip_name} =====')
         # First we need to find the ft shooter in clip (bounding box)
-        # if clip_name != '7':
+        # if clip_name != '77':
         #     continue
         curr_clip_fpath = osp.join(clips_dir_fpath, clip_name)
         curr_clip_fpath = f'{curr_clip_fpath}.mp4'
@@ -511,7 +526,7 @@ def json2npy(data_dir, state_dict, num_samples, smooth):
             continue
         # Second we extract all poses into a matrix
         clip_joints_dir_fpath = osp.join(joints_dir_fpath, clip_name)
-        joints_json_files = os.listdir(clip_joints_dir_fpath)
+        # joints_json_files = os.listdir(clip_joints_dir_fpath)
 
         # work_num_frames = len(joints_json_files)
         # num_frames = len(joints_json_files)
