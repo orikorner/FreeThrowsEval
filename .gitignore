@@ -2,6 +2,8 @@
 .idea/workspace.xml
 # training logs directory
 train_log
+# visualizations directory
+visualizations
 
 # data should be added manually
 train/clips/*.mp4
