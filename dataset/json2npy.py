@@ -121,21 +121,33 @@ def locate_ft_shooter_in_clip(model, clip_fpath, num_samples, num_frames):
             rgb_frame = cv2.cvtColor(curr_frame, cv2.COLOR_BGR2RGB)
             pil_image = Image.fromarray(rgb_frame)
             t_pil_image = loader(pil_image).float()
-            # image = Variable(image, requires_grad=False)
             t_pil_image = t_pil_image.cuda()
 
             prediction = model([t_pil_image])
             predictions.append(prediction)
             disp_imgs.append(pil_image)  # TODO maybe use it for testing visualization
+    # print(len(predictions))
+    # for k in range(len(predictions)):
+    #     print(predictions[k][0]['scores'])
+    # for k in range(len(predictions)):
+    #     print(predictions[k][0]['boxes'])
+    # exit()
 
     w, h = disp_imgs[0].size
     box_bins = []
-    if len(predictions[0][0]['boxes']) > 0:
-        box_bins = [[predictions[0][0]['boxes'][0].cpu().numpy()]]
-    for i in range(1, len(predictions)):
+    # if len(predictions[0][0]['boxes']) > 0:
+    #     box_bins = [[predictions[0][0]['boxes'][0].cpu().numpy()]]
+    for i in range(8, len(predictions)):
         if len(predictions[i][0]['boxes']) == 0:
             continue
+        # if predictions[i][0]['scores'][0].item() < 0.5:
+        #     continue
         curr_box = predictions[i][0]['boxes'][0].cpu().numpy()
+        if len(predictions[i][0]['boxes']) > 1:
+            curr_box = predictions[i][0]['boxes'][1].cpu().numpy()
+        if len(box_bins) == 0:
+            box_bins.append([curr_box])
+            continue
 
         found_bin = False
         for j in range(len(box_bins)):
@@ -238,7 +250,9 @@ def fill_zero_joints(joint_motion):
                 joint_motion[0][1] = joint_motion[t][1]
                 print('FIRST')
                 break
-    assert joint_motion[0][0] != 0 and joint_motion[0][1] != 0
+    # assert joint_motion[0][0] != 0 and joint_motion[0][1] != 0
+    if joint_motion[0][0] == 0 and joint_motion[0][1] == 0:
+        return joint_motion.T
 
     # Handling last frame
     if joint_motion[len(joint_motion) - 1][0] == 0:
@@ -249,7 +263,7 @@ def fill_zero_joints(joint_motion):
                 print('Last')
                 break
 
-    assert joint_motion[len(joint_motion) - 1][0] != 0 and joint_motion[len(joint_motion) - 1][1] != 0
+    # assert joint_motion[len(joint_motion) - 1][0] != 0 and joint_motion[len(joint_motion) - 1][1] != 0
 
     for i in range(len(joint_motion)):
         if joint_motion[i][0] == 0:
@@ -469,7 +483,9 @@ def openpose2motionv2(json_dir, ft_bounding_box, scale=1.0, smooth=True):
     # Perform interpolation to remedy zeros
     # test_motion = motion.copy()
 
-    for i in range(len(motion)):
+    n_joints, _, n_frames = motion.shape
+
+    for i in range(n_joints):
         motion[i] = fill_zero_joints(motion[i].T)
 
     # j_dim, xy, n_fr = motion.shape
@@ -516,7 +532,7 @@ def json2npy(data_dir, state_dict, num_samples, smooth):
     for i, clip_name in enumerate(vids_kp_dirs):
         print(f'====== {i} - {clip_name} =====')
         # First we need to find the ft shooter in clip (bounding box)
-        # if clip_name != '77':
+        # if clip_name != '489':
         #     continue
         curr_clip_fpath = osp.join(clips_dir_fpath, clip_name)
         curr_clip_fpath = f'{curr_clip_fpath}.mp4'
@@ -526,9 +542,7 @@ def json2npy(data_dir, state_dict, num_samples, smooth):
             continue
         # Second we extract all poses into a matrix
         clip_joints_dir_fpath = osp.join(joints_dir_fpath, clip_name)
-        # joints_json_files = os.listdir(clip_joints_dir_fpath)
 
-        # work_num_frames = len(joints_json_files)
         # num_frames = len(joints_json_files)
         motion = openpose2motionv2(clip_joints_dir_fpath, ft_bounding_box, smooth=smooth)
         # returned motion shape is (J, 2, max_frame) and belongs to the free throws shooter

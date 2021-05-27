@@ -9,7 +9,6 @@ import torch
 import os
 from collections import OrderedDict
 from tqdm import tqdm
-# from tensorboardX import SummaryWriter
 from torch.utils.tensorboard import SummaryWriter
 import argparse
 
@@ -19,23 +18,6 @@ torch.backends.cudnn.benchmark = True
 CMD: train.py -g 0
 """
 from torch.utils.tensorboard.summary import hparams
-
-
-# class CorrectedSummaryWriter(SummaryWriter):
-#     def add_hparams(self, hparam_dict, metric_dict):
-#         torch._C._log_api_usage_once("tensorboard.logging.add_hparams")
-#         if type(hparam_dict) is not dict or type(metric_dict) is not dict:
-#             raise TypeError('hparam_dict and metric_dict should be dictionary.')
-#         exp, ssi, sei = hparams(hparam_dict, metric_dict)
-#
-#         logdir = self._get_file_writer().get_logdir()
-#
-#         with SummaryWriter(log_dir=logdir) as w_hp:
-#             w_hp.file_writer.add_summary(exp)
-#             w_hp.file_writer.add_summary(ssi)
-#             w_hp.file_writer.add_summary(sei)
-#             for k, v in metric_dict.items():
-#                 w_hp.add_scalar(k, v)
 
 
 class CorrectedSummaryWriter(SummaryWriter):
@@ -97,14 +79,13 @@ def main():
 
     label_img = None
     once = True
-    batches = [16, 24]
-    lr_list = [0.001, 0.0001]
+    batches = [24, 32]
+    lr_list = [0.0001]
     classes = ['X', 'V']
     for curr_batch in batches:
         for curr_lr in lr_list:
             print(f'==================== {curr_batch} - {curr_lr} ===============================')
-            if curr_batch == 24 and curr_lr == 0.001:
-                continue
+
             net = get_network(config)
             net = net.to(config.device)
             # create tensorboard writer
@@ -113,9 +94,9 @@ def main():
 
             # create dataloader
             train_loader = get_dataloader('train', config, curr_batch, config.num_workers)
-            train_loader_full = get_dataloader('train', config, 140, config.num_workers)
+            train_loader_full = get_dataloader('train', config, 276, config.num_workers, shuffle=False)
 
-            val_loader = get_dataloader('test', config, 22, config.num_workers, shuffle=False)
+            val_loader = get_dataloader('test', config, 50, config.num_workers, shuffle=False)
             val_loader = cycle(val_loader)
 
             # create training agent
@@ -192,7 +173,7 @@ def main():
 
                         labels = data['label']
                         predictions, _, correct = get_predictions(outputs,
-                                                        data['name'], data['motion'].to(config.device), labels, w_print=False)
+                                                        data['name'], data['motion'].to(config.device), labels, w_print=True)
                         val_acc = correct / len(labels)
                         # val_tb.add_figure('Predictions vs. Actual',
                         #                   plot_classes_preds(outputs, vid_names, inputs, labels),
@@ -213,7 +194,7 @@ def main():
                         # Feature Map Embeddings visualization
                         if once:
                             # print(data['name'])
-                            label_img = get_val_dummy_imgs(140, 100, 100, labels.reshape(-1).numpy())
+                            label_img = get_val_dummy_imgs(276, 100, 100, labels.reshape(-1).numpy())
                             once = False
 
                         motion_enc_out = torch.from_numpy(activation['mot_encoder'])
@@ -221,8 +202,8 @@ def main():
 
                         static_enc_out = static_enc_out.repeat(1, 1, motion_enc_out.shape[-1])
                         feat_map = torch.cat([motion_enc_out, static_enc_out], dim=1)
-                        feat_map = feat_map.view(-1, 768)
-
+                        # feat_map = feat_map.view(-1, 768)
+                        feat_map = feat_map.reshape(276, 768)
                         class_labels = [classes[pred] for pred in predictions]
 
                         train_tb.add_embedding(feat_map, metadata=class_labels,

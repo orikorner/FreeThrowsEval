@@ -19,7 +19,8 @@ def parse_args():
     parser.add_argument('--joints-dir', type=str, help='full path to joints file as .npy')
     parser.add_argument('--clips-dir', type=str, help='full path to clip as .mp4')
     parser.add_argument('--out-dir', type=str, help='full path to output clip dir')
-
+    parser.add_argument('--n-sample-frames', type=int, help='Number of frames taken for training, '
+                                                            'as implemented in get_item()')
     args = parser.parse_args()
     return args
 
@@ -123,7 +124,7 @@ def rgb2rgba(color):
     return (color[0], color[1], color[2], 255)
 
 
-def joints2image(joints_position, colors, transparency=False, H=512, W=512, nr_joints=49, imtype=np.uint8):
+def joints2image(joints_position, colors, transparency=False, H=512, W=512, nr_joints=49, max_sample_frames=False, imtype=np.uint8):
     nr_joints = joints_position.shape[0]
 
     if nr_joints == 49: # full joints(49): basic(15) + eyes(2) + toes(2) + hands(30)
@@ -163,6 +164,13 @@ def joints2image(joints_position, colors, transparency=False, H=512, W=512, nr_j
         canvas = np.zeros(shape=(H, W, 4))
     else:
         canvas = np.ones(shape=(H, W, 3)) * 255
+        if max_sample_frames:
+            canvas[-10:, :, 1:-1] = 0  # Set Bottom frame line in Red
+            canvas[:10, :, 1:-1] = 0  # Set Bottom frame line in Red
+            canvas[:, -10:, 1:-1] = 0  # Set Bottom frame line in Red
+            canvas[:, :10, 1:-1] = 0  # Set Bottom frame line in Red
+
+
     hips = joints_position[8]
     neck = joints_position[1]
     torso_length = ((hips[1] - neck[1]) ** 2 + (hips[0] - neck[0]) ** 2) ** 0.5
@@ -271,7 +279,8 @@ def pose2im(all_peaks, limbSeq, limb_colors, joint_colors, H, W, _circle=True, _
     return canvas.astype(imtype)
 
 
-def motion2video(motion, h, w, save_path, colors, transparency=False, motion_tgt=None, fps=25, save_frame=False):
+def motion2video(motion, h, w, save_path, colors, n_sample_frames=-1, transparency=False, motion_tgt=None, fps=25, save_frame=False):
+    max_sample_frames = False
     nr_joints = motion.shape[0]
     videowriter = imageio.get_writer(save_path, fps=fps)
     vlen = motion.shape[-1]
@@ -280,7 +289,9 @@ def motion2video(motion, h, w, save_path, colors, transparency=False, motion_tgt
         frames_dir = save_path[:-4] + '-frames'
         utils.ensure_dir(frames_dir)
     for i in tqdm(range(vlen)):
-        [img, img_cropped] = joints2image(motion[:, :, i], colors, transparency, H=h, W=w, nr_joints=nr_joints)
+        if i >= n_sample_frames:
+            max_sample_frames = True
+        [img, img_cropped] = joints2image(motion[:, :, i], colors, transparency, H=h, W=w, nr_joints=nr_joints, max_sample_frames=max_sample_frames)
         if motion_tgt is not None:
             [img_tgt, img_tgt_cropped] = joints2image(motion_tgt[:, :, i], colors, transparency, H=h, W=w, nr_joints=nr_joints)
             img_ori = img.copy()
@@ -296,7 +307,7 @@ def motion2video(motion, h, w, save_path, colors, transparency=False, motion_tgt
 
 if __name__ == '__main__':
     args = parse_args()
-
+    n_sample_frames = args.n_sample_frames
     utils.ensure_dir(args.out_dir)
     joints = os.listdir(args.joints_dir)
     clips = [x for x in os.listdir(args.clips_dir) if x.endswith('.mp4')]
@@ -312,8 +323,8 @@ if __name__ == '__main__':
 
         curr_motion_name = f'{curr_clip_name.split(".")[0]}.npy'
 
-        if curr_motion_name != '77.npy':
-            continue
+        # if curr_motion_name != '489.npy':
+        #     continue
 
         curr_out_name = osp.join(args.out_dir, curr_clip_name)
 
@@ -328,8 +339,8 @@ if __name__ == '__main__':
         if width > 1000 and height > 700:
             if fps < 24 or fps > 25:
                 print(f'{curr_clip_name} - FPS: {fps}')
-            motion = motion[:, :, :length - 20]
-            motion2video(motion, height, width, curr_out_name, color1,
+            # motion = motion[:, :, :length - 20]
+            motion2video(motion, height, width, curr_out_name, color1, n_sample_frames=n_sample_frames,
                          transparency=False, motion_tgt=None, fps=fps, save_frame=False)
         else:
             print(f'{curr_clip_name} - W: {width} , H: {height}')
