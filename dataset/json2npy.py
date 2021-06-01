@@ -14,11 +14,15 @@ from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 from torchvision import transforms
 from PIL import Image
+import pandas as pd
+from utils.utils import ensure_dir
 
 
 JOINTS_DIR = 'joints'
 CLIPS_DIR = 'clips'
 MOTION_DIR = 'motion'
+BBALL_BB_DIR = 'bball_trajectory'
+SHOT_TRAJECTORY_DIR = 'shot_trajectory'
 IOU_THRESHOLD = 0.3
 
 
@@ -26,6 +30,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--data-dir', type=str, help='fpath to dataset dir')
+    parser.add_argument('--out-file', type=str, default='bball_trajectory.csv', help='out .csv file')
     parser.add_argument('--checkpoint', type=str, help='fpath to mask rcnn model weights')
     parser.add_argument('--num-samples', type=int, default=5, help='Num of frames to sample for ft shooter detection')
     parser.add_argument('--w-smooth', action='store_true', default=False, help='whether to smooth motion')
@@ -52,6 +57,77 @@ def get_instance_segmentation_model(num_classes=2):
                                                        num_classes)
 
     return model
+
+
+def is_ball_in_hands_by_idx_n_eps(motion, time_i, bball_bb, eps=5):
+    """ Checking if the ball is in the shooters hands. We consider a positive response if
+    either one of his hands are in eps proximity to the ball's bounding box center. If not, we also
+    verify ball is located higher than the shooter, to avoid cases like dribbling.
+    """
+    in_hands = True
+    bball_center = np.array([0.25 * (bball_bb[0] + bball_bb[2]), 0.25 * (bball_bb[1] + bball_bb[3])])
+    r_hand_pos = motion[4, :, time_i]
+    l_hand_pos = motion[7, :, time_i]
+    r_hand_dist = np.linalg.norm(bball_center - r_hand_pos)
+    l_hand_dist = np.linalg.norm(bball_center - l_hand_pos)
+    if r_hand_dist > eps and l_hand_dist > eps:
+        head_pos_y = motion[0][1][time_i]
+        neck_pos_y = motion[1][1][time_i]
+        if (head_pos_y != 0 and head_pos_y >= bball_center[1]) or (neck_pos_y != 0 and neck_pos_y >= bball_center[1]):
+            # Checking the ball is located higher than the person (e.g not a dribble)
+            in_hands = False
+
+    return in_hands
+
+
+def is_ball_in_ascending_trajectory(a_bball_bb):
+    """ Checking if the ball is in an ascending trajectory by observing the
+    y coordinate of the ball's bounding box center across the given array coords"""
+    is_ascending = True
+    prev_bball_bb = a_bball_bb[0]
+    for i in range(1, len(a_bball_bb)):
+        curr_bball_bb = a_bball_bb[i]
+        if curr_bball_bb[1] > prev_bball_bb[1]:
+            # Comparing Y values
+            prev_bball_bb = curr_bball_bb
+        else:
+            is_ascending = False
+            break
+
+    return is_ascending
+
+
+def is_ball_in_descending_trajectory(a_bball_bb):
+    """ Checking if the ball is in a descending trajectory by observing the
+    y coordinate of the ball's bounding box center across the given array coords"""
+    is_descending = True
+    prev_bball_bb = a_bball_bb[0]
+    for i in range(1, len(a_bball_bb)):
+        curr_bball_bb = a_bball_bb[i]
+        if curr_bball_bb[1] < prev_bball_bb[1]:
+            # Comparing Y values
+            prev_bball_bb = curr_bball_bb
+        else:
+            is_descending = False
+            break
+
+    return is_descending
+
+
+def find_shot_frame_index(motion, a_bball_bb):
+    """ finds the shot release frame index by checking that:
+    1. The ball is not in the shooter hand by distance of atleast eps
+    2. The ball is in an ascending trajectory (to avoid catching a dribble or pose noise errors)
+    Returning the frame index (int)
+    """
+    n_traj_asc_samples = 5
+    _, _, num_frames = motion.shape
+    for frame_i in range(num_frames):
+        in_hands = is_ball_in_hands_by_idx_n_eps(motion, frame_i, a_bball_bb[frame_i])
+        if not in_hands:
+            is_ascending = is_ball_in_ascending_trajectory(a_bball_bb[frame_i:frame_i + n_traj_asc_samples])
+            if is_ascending:
+                return frame_i
 
 
 def sample_n_frames_from_vid(video_path, num_samples=5, num_frames=None):
@@ -103,8 +179,6 @@ def calc_iou(first, second, canvas_w, canvas_h):
     union = (first_canvas + second_canvas).sum(1).sum(0)
     iou = (intersect + 0.001) / (union - intersect + 0.001)
 
-    #thresholded = np.ceil(np.clip(20 * (iou - 0.5), 0, 10)) / 10
-    #return thresholded  # Or thresholded.mean()
     return iou
 
 
@@ -184,17 +258,6 @@ def prepare_model(state_dict):
     model = get_instance_segmentation_model(num_classes)
     # move model to the right device
     model.to(device)
-
-    # construct an optimizer
-    # params = [p for p in model.parameters() if p.requires_grad]
-    # optimizer = torch.optim.SGD(params, lr=0.005,
-    #                             momentum=0.9, weight_decay=0.0005)
-
-    # and a learning rate scheduler which decreases the learning rate by
-    # 10x every 3 epochs
-    # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
-    #                                                step_size=3,
-    #                                                gamma=0.1)
 
     model.load_state_dict(torch.load(state_dict))
     model = model.cuda()  # TODO redundant?
@@ -528,6 +591,7 @@ def json2npy(data_dir, state_dict, num_samples, smooth):
     clips_dir_fpath = osp.join(data_dir, CLIPS_DIR)
     joints_dir_fpath = osp.join(data_dir, JOINTS_DIR)
     out_dir = osp.join(data_dir, MOTION_DIR)
+    ensure_dir(out_dir)
     vids_kp_dirs = os.listdir(joints_dir_fpath)
     for i, clip_name in enumerate(vids_kp_dirs):
         print(f'====== {i} - {clip_name} =====')
@@ -552,7 +616,116 @@ def json2npy(data_dir, state_dict, num_samples, smooth):
         print(save_fpath)
         np.save(save_fpath, motion)
 
+# def get_shot_frame_index(video_path, sample_intervals=2):
+#     assert osp.exists(video_path)
+#
+#     selected_frames = []
+#     capture = cv2.VideoCapture(video_path)
+#     num_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+#
+#     start = 0
+#     capture.set(1, start)  # set the starting frame of the capture
+#
+#     for i in range(0, num_frames, sample_intervals):
+#         res, image = capture.read()
+#
+#         if image is not None and res is True:
+#             # sometimes OpenCV reads None's during a video, in which case we want to just skip
+#             # TODO Locate ball
+#             selected_frames.append(image)
+#             curr_chosen_idx += 1
+#
+#     capture.release()
+#     cv2.destroyAllWindows()
+#
+#     assert len(selected_frames) == num_samples
+#     return selected_frames
+
+
+def read_bball_bb_info_file_into_np_array(bball_bb_fpath):
+    """ Takes a single ball trajectory info file and parses is into a numpy array.
+    every line in the file represents a frame, and every line is of format:
+    label_id x1 y1 x2 y2
+    we return a numpy array with the coordinates separated by a comma
+    """
+    bball_bb_info = []
+    with open(bball_bb_fpath, 'r') as bball_bb_fp:
+        for i, line in enumerate(bball_bb_fp):
+            if not line.strip():
+                # Check if ball not found (empty line)
+                curr_bball_bb = [0, 0, 0, 0]
+                print(f'!!!!!!! DID NOT FIND ANY BASKETBALL in frame {i} !!!!!!! ')
+            else:
+                curr_bball_bb = [int(x) for x in line.split(' ')]
+                curr_bball_bb.pop(0)  # Removing the Label (keeping coordinates)
+            bball_bb_info.append(curr_bball_bb)
+    # TODO here we need to handle missing balls
+    return np.array(bball_bb_info)
+
+
+def make_ball_trajectory_array(complete_shot_trajectory, sample_interval=2):
+    """
+    Samples the basketball's position in intervals. After max exterma is reached in trajectory, we
+    sample 7 more consecutive points along the trajectory.
+    """
+    n_traj_desc_samples = 5
+    sampled_shot_trajectory = []
+    for i in range(0, len(complete_shot_trajectory), sample_interval):
+        curr_bball_pos = complete_shot_trajectory[i]
+        sampled_shot_trajectory.append(curr_bball_pos)
+        is_descending = is_ball_in_descending_trajectory(complete_shot_trajectory[i:i + n_traj_desc_samples])
+        if is_descending:
+            sampled_shot_trajectory.extend(complete_shot_trajectory[i + 1:i + 8])  # TODO
+            break
+
+    return np.array(sampled_shot_trajectory)
+
+
+def create_shots_frames_labels(data_dir, out_fname):
+    """ Main Function - Finds the shot frame index using motion matrix and bounding box trajectories:
+     Expects a BBALL_BB_DIR containing txt files, each holds the ball position throughout the clip,
+     i.e every line in each files represents the frame index, and every line is of format:
+     label_id x1 y1 x2 y2
+     """
+    shot_traj_dir = osp.join(data_dir, SHOT_TRAJECTORY_DIR)
+    ensure_dir(shot_traj_dir)
+    motions_dir = osp.join(data_dir, MOTION_DIR)
+    bball_bb_dir_fpath = osp.join(data_dir, BBALL_BB_DIR)
+    l_motion_file_names = os.listdir(motions_dir)
+    l_mot_out_names = []
+    l_shot_frame_indices = []
+    for i, curr_motion_fname in enumerate(l_motion_file_names):
+        print(f'====== {i} - {curr_motion_fname} =====')
+        print(f'Searching for shot release frame...')
+        # Getting FT Shooter's motion
+        curr_motion = np.load(osp.join(motions_dir, curr_motion_fname))
+        # Getting Basketball Bounding box trajectory
+        curr_motion_fname = osp.splitext(curr_motion_fname)[0]
+        curr_bball_bb_fpath = f'{curr_motion_fname}.txt'
+        curr_bball_bb_fpath = osp.join(bball_bb_dir_fpath, curr_bball_bb_fpath)
+        a_bball_bb = read_bball_bb_info_file_into_np_array(curr_bball_bb_fpath)
+        shot_frame_i = find_shot_frame_index(curr_motion, a_bball_bb)
+        print(f'Found shot release in frame {shot_frame_i}')
+        l_mot_out_names.append(curr_motion_fname)
+        l_shot_frame_indices.append(shot_frame_i)
+        print('Producing shot trajectory...')
+        a_shot_trajectory = make_ball_trajectory_array(a_bball_bb[shot_frame_i:])
+        print('Saving shot trajectory info...')
+        save_fpath = osp.join(shot_traj_dir, curr_motion_fname)
+        save_fpath = f'{save_fpath}.npy'
+        print(save_fpath)
+        print(a_shot_trajectory)
+        exit()
+        np.save(save_fpath, a_shot_trajectory)
+        print(f'Saved in {save_fpath}')
+
+    out_fpath = osp.join(data_dir, out_fname)
+    df = pd.DataFrame({'video_name': l_mot_out_names,
+                       'shot_frame': l_shot_frame_indices})
+    df.to_csv(out_fpath, index=False)
+
 
 if __name__ == '__main__':
     args = parse_args()
-    json2npy(args.data_dir, args.checkpoint, args.num_samples, args.w_smooth)
+    # json2npy(args.data_dir, args.checkpoint, args.num_samples, args.w_smooth)
+    create_shots_frames_labels(args.data_dir, args.out_file) # TODO put it in a separate module

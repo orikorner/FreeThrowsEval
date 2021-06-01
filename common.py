@@ -58,7 +58,7 @@ class Config:
     lr = 1e-3
 
     save_frequency = 25
-    val_frequency = 9
+    val_frequency = 13
 
     def initialize(self, args):
         self.name = args.name if hasattr(args, 'name') else 'skeleton'

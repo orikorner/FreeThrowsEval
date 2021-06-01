@@ -79,8 +79,10 @@ def main():
 
     label_img = None
     once = True
-    batches = [24, 32]
-    lr_list = [0.0001]
+    batches = [24]
+    lr_list = [0.001]
+    train_set_len = 276
+    val_set_len = 50
     classes = ['X', 'V']
     for curr_batch in batches:
         for curr_lr in lr_list:
@@ -94,9 +96,9 @@ def main():
 
             # create dataloader
             train_loader = get_dataloader('train', config, curr_batch, config.num_workers)
-            train_loader_full = get_dataloader('train', config, 276, config.num_workers, shuffle=False)
+            train_loader_full = get_dataloader('train', config, train_set_len, config.num_workers, shuffle=False)
 
-            val_loader = get_dataloader('test', config, 50, config.num_workers, shuffle=False)
+            val_loader = get_dataloader('test', config, val_set_len, config.num_workers, shuffle=False)
             val_loader = cycle(val_loader)
 
             # create training agent
@@ -105,8 +107,6 @@ def main():
 
             # start training
             for e in range(config.nr_epochs):
-                # e_losses = []
-                # e_accuracies = []
                 # begin iteration
                 pbar = tqdm(train_loader)
                 for b, data in enumerate(pbar):
@@ -130,36 +130,13 @@ def main():
                     for k, v in losses_values.items():
                         train_tb.add_scalar(k, v, clock.step)
 
-                    # Batch Loss and Accuracy - for hyper params search
-                    # e_losses.append(losses_values['cross_entropy'])
                     labels = data['label']
                     predictions, _, correct = get_predictions(outputs,
                                                               data['name'], data['motion'].to(config.device), labels, w_print=False)
-                    # batch_train_acc = correct / len(labels)
-                    # e_accuracies.append(batch_train_acc)
-
-                    # Feature maps visualization
-                    # if b == 1:
-                    #     if once:
-                        #     print(data['name'])
-                    #         label_img = get_val_dummy_imgs(curr_batch, 100, 100, labels.reshape(-1).numpy())
-                    #         once = False
-                    #     # features = data['motion'].reshape(data['motion'].shape[0], -1)
-                    #     motion_enc_out = torch.from_numpy(activation['mot_encoder'])
-                    #     static_enc_out = torch.from_numpy(activation['static_encoder'])
-                    #
-                    #     static_enc_out = static_enc_out.repeat(1, 1, motion_enc_out.shape[-1])
-                    #     feat_map = torch.cat([motion_enc_out, static_enc_out], dim=1)
-                    #     feat_map = feat_map.view(-1, 768)
-                    #
-                    #     class_labels = [classes[pred] for pred in predictions]
-                    #     train_tb.add_embedding(feat_map, metadata=class_labels, label_img=label_img, global_step=clock.step)
-                        # train_tb.add_embedding(feat_map, metadata=class_labels, label_img=data['motion'].unsqueeze(1), global_step=b)
 
                     pbar.set_description("EPOCH[{}][{}/{}]".format(e, b, len(train_loader)))
                     pbar.set_postfix(OrderedDict({"Loss": sum(losses_values.values())}))
 
-                    # val step-print every val.frequency batches (e.g val_freq = 10, batch size = 8 -> every 80 samples) = every 10 batches
                     if (clock.step + 1) % config.val_frequency == 0:
                         # Getting Validation Loss and Accuracy (over entire validation set)
                         data = next(val_loader)
@@ -168,16 +145,10 @@ def main():
                         losses_values = {k: v.item() for k, v in losses.items()}
                         val_loss = losses_values['cross_entropy']
 
-                        # for k, v in losses_values.items():
-                        #     val_tb.add_scalar(k, v, clock.step)
-
                         labels = data['label']
                         predictions, _, correct = get_predictions(outputs,
                                                         data['name'], data['motion'].to(config.device), labels, w_print=True)
                         val_acc = correct / len(labels)
-                        # val_tb.add_figure('Predictions vs. Actual',
-                        #                   plot_classes_preds(outputs, vid_names, inputs, labels),
-                        #                   global_step=clock.step)
 
                         # Getting Train Loss and Accuracy (over entire training set)
                         data = next(iter(train_loader_full))
@@ -193,8 +164,7 @@ def main():
 
                         # Feature Map Embeddings visualization
                         if once:
-                            # print(data['name'])
-                            label_img = get_val_dummy_imgs(276, 100, 100, labels.reshape(-1).numpy())
+                            label_img = get_val_dummy_imgs(train_set_len, 100, 100, labels.reshape(-1).numpy())
                             once = False
 
                         motion_enc_out = torch.from_numpy(activation['mot_encoder'])
@@ -202,8 +172,7 @@ def main():
 
                         static_enc_out = static_enc_out.repeat(1, 1, motion_enc_out.shape[-1])
                         feat_map = torch.cat([motion_enc_out, static_enc_out], dim=1)
-                        # feat_map = feat_map.view(-1, 768)
-                        feat_map = feat_map.reshape(276, 768)
+                        feat_map = feat_map.reshape(train_set_len, 768)
                         class_labels = [classes[pred] for pred in predictions]
 
                         train_tb.add_embedding(feat_map, metadata=class_labels,
@@ -219,23 +188,6 @@ def main():
 
                     clock.tick()
 
-                # data = next(val_loader)
-                # outputs, losses = tr_moder.val_func(data)
-                #
-                # losses_values = {k: v.item() for k, v in losses.items()}
-                # val_loss = losses_values['cross_entropy']
-                # labels = data['label']
-                #
-                # predictions, _, correct = get_predictions(outputs,
-                #                                           data['name'], data['motion'].to(config.device), labels,
-                #                                           w_print=False)
-                # val_acc = correct / len(labels)
-
-                # train_tb.add_hparams({'lr': curr_lr, 'bsize': curr_batch},
-                #                      {'train accuracy': sum(e_accuracies)/len(e_accuracies),
-                #                       'train loses': sum(e_losses)/len(e_losses),
-                #                       'val accuracy': val_acc,
-                #                       'val loss': val_loss})
                 train_tb.add_scalar('learning_rate', tr_moder.optimizer.param_groups[-1]['lr'], clock.epoch)
                 tr_moder.update_learning_rate()
 
