@@ -80,8 +80,8 @@ def main():
     label_img = None
     once = True
     batches = [24]
-    lr_list = [0.001]
-    train_set_len = 276
+    lr_list = [0.0001]
+    train_set_len = 270
     val_set_len = 50
     classes = ['X', 'V']
     for curr_batch in batches:

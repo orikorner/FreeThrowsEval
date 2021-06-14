@@ -17,6 +17,7 @@ class Moderator(object):
         self.net = net
         self.clock = TrainClock()
         self.device = config.device
+        n_epochs = config.nr_epochs
         # self.use_triplet = config.use_triplet
         # self.use_footvel_loss = config.use_footvel_loss
 
@@ -27,10 +28,11 @@ class Moderator(object):
         # self.foot_idx = config.foot_idx
         # self.footvel_loss_weight = config.footvel_loss_weight
         self.cross_ent_loss = nn.CrossEntropyLoss() # TODO: .to(self.device)
-
         # set optimizer
         self.optimizer = optim.Adam(self.net.parameters(), lr)
         self.scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, 0.99)
+        # milestones = [round(n_epochs * 0.8), round(n_epochs * 0.9)]
+        # self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=milestones, gamma=0.1)
 
     def forward(self, data):
         inputs = data['motion'].to(self.device)

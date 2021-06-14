@@ -11,16 +11,21 @@ from PIL import Image
 import imageio
 import os
 import os.path as osp
+import pandas as pd
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--joints-dir', type=str, help='full path to joints file as .npy')
-    parser.add_argument('--clips-dir', type=str, help='full path to clip as .mp4')
-    parser.add_argument('--out-dir', type=str, help='full path to output clip dir')
-    parser.add_argument('--n-sample-frames', type=int, help='Number of frames taken for training, '
-                                                            'as implemented in get_item()')
+    parser.add_argument('--data-dir', type=str, default='bbfts_data/train', help='path to data dir of a certain phase')
+    parser.add_argument('--motion-dir', type=str, default='motion', help='name of joints dir')
+    parser.add_argument('--clips-dir', type=str, default='clips', help='name of clips dir')
+    parser.add_argument('--out-dir', type=str, default='visualizations/train', help='full path to output dir')
+    parser.add_argument('--detections-dir', type=str, default='processed_yolo_detections', help='name of ball and hoop locations processed dir')
+    parser.add_argument('--shot-traj-dir', type=str, default='shot_trajectories', help='name of shot trajectory dir')
+    parser.add_argument('--labels-info', type=str, default='bbfts_data/bbfts_labels.csv', help='full path to labels file')
+
+
     args = parser.parse_args()
     return args
 
@@ -124,7 +129,7 @@ def rgb2rgba(color):
     return (color[0], color[1], color[2], 255)
 
 
-def joints2image(joints_position, colors, transparency=False, H=512, W=512, nr_joints=49, max_sample_frames=False, imtype=np.uint8):
+def joints2image(joints_position, colors, transparency=False, H=512, W=512, nr_joints=49, shot_released=False, imtype=np.uint8):
     nr_joints = joints_position.shape[0]
 
     if nr_joints == 49: # full joints(49): basic(15) + eyes(2) + toes(2) + hands(30)
@@ -164,12 +169,11 @@ def joints2image(joints_position, colors, transparency=False, H=512, W=512, nr_j
         canvas = np.zeros(shape=(H, W, 4))
     else:
         canvas = np.ones(shape=(H, W, 3)) * 255
-        if max_sample_frames:
+        if shot_released:
             canvas[-10:, :, 1:-1] = 0  # Set Bottom frame line in Red
             canvas[:10, :, 1:-1] = 0  # Set Bottom frame line in Red
             canvas[:, -10:, 1:-1] = 0  # Set Bottom frame line in Red
             canvas[:, :10, 1:-1] = 0  # Set Bottom frame line in Red
-
 
     hips = joints_position[8]
     neck = joints_position[1]
@@ -279,19 +283,31 @@ def pose2im(all_peaks, limbSeq, limb_colors, joint_colors, H, W, _circle=True, _
     return canvas.astype(imtype)
 
 
-def motion2video(motion, h, w, save_path, colors, n_sample_frames=-1, transparency=False, motion_tgt=None, fps=25, save_frame=False):
-    max_sample_frames = False
+def get_hoop_plot_info(hoop_bb):
+    bball_center = np.array([0.5 * (hoop_bb[0] + hoop_bb[2]), 0.5 * (hoop_bb[1] + hoop_bb[3])])
+    return int(hoop_bb[0]), int(bball_center[1]), int(hoop_bb[2]), int(bball_center[1])
+
+
+def motion2video(motion, h, w, save_path, colors, shot_rel_frame=-1, shot_traj=None, hoop_bbs=None, transparency=False, motion_tgt=None, fps=25, save_frame=False):
+    shot_released = False
     nr_joints = motion.shape[0]
     videowriter = imageio.get_writer(save_path, fps=fps)
     vlen = motion.shape[-1]
-
+    k = 0
     if save_frame:
         frames_dir = save_path[:-4] + '-frames'
         utils.ensure_dir(frames_dir)
     for i in tqdm(range(vlen)):
-        if i >= n_sample_frames:
-            max_sample_frames = True
-        [img, img_cropped] = joints2image(motion[:, :, i], colors, transparency, H=h, W=w, nr_joints=nr_joints, max_sample_frames=max_sample_frames)
+        if i >= shot_rel_frame:
+            shot_released = True
+        [img, img_cropped] = joints2image(motion[:, :, i], colors, transparency, H=h, W=w, nr_joints=nr_joints, shot_released=shot_released)
+        if shot_released and k < len(shot_traj):
+            cv2.circle(img, (int(shot_traj[k][0]), int(shot_traj[k][1])), 5, [255, 0, 0], thickness=4)
+            k += 1
+        # Draw Hoop
+        if len(hoop_bbs) > i:
+            x1, y1, x2, y2 = get_hoop_plot_info(hoop_bbs[i])
+            cv2.line(img, (x1, y1), (x2, y2), (0, 255, 0), thickness=5)
         if motion_tgt is not None:
             [img_tgt, img_tgt_cropped] = joints2image(motion_tgt[:, :, i], colors, transparency, H=h, W=w, nr_joints=nr_joints)
             img_ori = img.copy()
@@ -305,14 +321,48 @@ def motion2video(motion, h, w, save_path, colors, n_sample_frames=-1, transparen
     videowriter.close()
 
 
+def extract_hoop_info_into_np(objs_info_fpath):
+    """ Takes a single hoop and ball locations info file and parses is into a numpy array.
+    every line in the file represents a frame, and every line is of format:
+    obj_id x1 y1 x2 y2,obj_id x1 y1 x2 y2,
+    we return 2 numpy arrays (ball and hoop) with the coordinates separated by a comma
+    """
+    hoop_bb_info = []
+    with open(objs_info_fpath, 'r') as objs_info_fp:
+        for i, line in enumerate(objs_info_fp):
+            if not line.strip():
+                # Check if ball not found (empty line)
+                hoop_bb_info.append([0, 0, 0, 0])
+                print(f'!!!!!!! DID NOT FIND ANY BASKETBALL in frame {i} !!!!!!! ')
+            else:
+                obj1, obj2 = line.split(',')
+                obj1 = [int(x) for x in obj1.split(' ')]
+                obj2 = [int(x) for x in obj2.split(' ')]
+                # Object id coordinate
+                obj1_id = obj1.pop(0)
+                obj2_id = obj2.pop(0)
+                if obj1_id == 1 and obj2_id == 0:
+                    hoop_bb_info.append(obj1)
+                else:
+                    hoop_bb_info.append(obj2)
+
+    return np.array(hoop_bb_info)
+
+
 if __name__ == '__main__':
     args = parse_args()
-    n_sample_frames = args.n_sample_frames
-    utils.ensure_dir(args.out_dir)
-    joints = os.listdir(args.joints_dir)
-    clips = [x for x in os.listdir(args.clips_dir) if x.endswith('.mp4')]
 
-    assert len(joints) == len(clips)
+    shot_rel_df = pd.read_csv(args.labels_info, header=0)
+
+    utils.ensure_dir(args.out_dir)
+    shot_traj_dir = osp.join(args.data_dir, args.shot_traj_dir)
+    detections_dir = osp.join(args.data_dir, args.detections_dir)
+    motion_dir = osp.join(args.data_dir, args.motion_dir)
+    motions = os.listdir(motion_dir)
+    clips_dir = osp.join(args.data_dir, args.clips_dir)
+    clips = [x for x in os.listdir(clips_dir) if x.endswith('.mp4')]
+
+    assert len(motions) == len(clips)
 
     color1 = hex2rgb('#a50b69#b73b87#db9dc3')
     color2 = hex2rgb('#4076e0#40a7e0#40d7e0')
@@ -320,17 +370,22 @@ if __name__ == '__main__':
     colors = [color1, color2, color3]
 
     for i, curr_clip_name in enumerate(clips):
-
-        curr_motion_name = f'{curr_clip_name.split(".")[0]}.npy'
-
-        # if curr_motion_name != '489.npy':
+        curr_motion_name = curr_clip_name.split(".")[0]
+        # if curr_motion_name == '109' or curr_motion_name == '0' or curr_motion_name == '10' or \
+        #         100 <= int(curr_motion_name) <= 108:
         #     continue
+        # if i <= 227:
+        #     continue
+        curr_shot_rl_frame = shot_rel_df.loc[shot_rel_df['video_name'] == int(curr_motion_name)]['shot_frame'].item()
+        a_hoop_bb = extract_hoop_info_into_np(osp.join(detections_dir, f'{curr_motion_name}.txt'))
+        curr_motion_name = f'{curr_motion_name}.npy'
 
         curr_out_name = osp.join(args.out_dir, curr_clip_name)
 
-        motion = np.load(osp.join(args.joints_dir, curr_motion_name))
+        shot_traj = np.load(osp.join(shot_traj_dir, curr_motion_name))
 
-        capture = cv2.VideoCapture(osp.join(args.clips_dir, curr_clip_name))
+        motion = np.load(osp.join(motion_dir, curr_motion_name))
+        capture = cv2.VideoCapture(osp.join(clips_dir, curr_clip_name))
         width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
         length = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -339,8 +394,9 @@ if __name__ == '__main__':
         if width > 1000 and height > 700:
             if fps < 24 or fps > 25:
                 print(f'{curr_clip_name} - FPS: {fps}')
-            # motion = motion[:, :, :length - 20]
-            motion2video(motion, height, width, curr_out_name, color1, n_sample_frames=n_sample_frames,
+
+            motion2video(motion, height, width, curr_out_name, color1,
+                         shot_rel_frame=curr_shot_rl_frame, shot_traj=shot_traj, hoop_bbs=a_hoop_bb,
                          transparency=False, motion_tgt=None, fps=fps, save_frame=False)
         else:
             print(f'{curr_clip_name} - W: {width} , H: {height}')

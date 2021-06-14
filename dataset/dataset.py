@@ -32,7 +32,8 @@ class BBFTSDataset(Dataset):
         if torch.is_tensor(idx):
             print('IS TENSOR IN GETITEM')
             idx = idx.tolist()  # TODO
-
+        man_fix = 35
+        man_fix_top = 10
         vid_name = self.labels_df.iloc[idx]['video_name']
         # Create one-hot label vector
         label_idx = self.labels_df.iloc[idx]['label']
@@ -40,7 +41,23 @@ class BBFTSDataset(Dataset):
 
         vid_fpath = osp.join(self.data_fpath, f'{vid_name}.npy')
         motion = np.load(vid_fpath)
-        motion = motion[:, :, :45]
+        shot_frame = int(self.labels_df.iloc[idx]['shot_frame'])
+        assert shot_frame != ''
+
+        # if vid_name == 170:
+        #     shot_frame = 51
+
+        if shot_frame <= man_fix:
+            n_diff = man_fix - shot_frame
+            shot_frame += n_diff
+            first_pose = np.copy(motion[:, :, 0])
+            first_pose = first_pose[..., np.newaxis]
+            first_pose_matrix = np.repeat(first_pose, n_diff, axis=2)
+            motion = np.concatenate((first_pose_matrix, motion), axis=2)
+
+        motion = motion[:, :, shot_frame - man_fix:shot_frame + man_fix_top]
+        # _, _, t = motion.shape
+        # print(f'{vid_name} - {shot_frame} = {t}')
         motion = self.preprocessing(motion)
 
         sample = {'name': vid_name, 'motion': motion, 'label': label}
@@ -50,6 +67,7 @@ class BBFTSDataset(Dataset):
         # Here i need to normalize 2d joints matrix
         # joints_arr = np.load(item)
         # if self.aug:
+        #     TODO HERE
         #     motion3d, param = self.augmentation(motion3d, param)
         motion = normalize_motion(motion, self.mean_pose, self.std_pose)
         motion = motion.reshape((-1, motion.shape[-1]))  # Should be (joints*2, len_frames)

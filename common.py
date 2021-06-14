@@ -52,7 +52,7 @@ class Config:
     # foot_idx = [20, 21, 26, 27]
     # footvel_loss_weight = 0.1
 
-    nr_epochs = 100
+    nr_epochs = 150
     batch_size = 24
     num_workers = 0  # TODO
     lr = 1e-3
