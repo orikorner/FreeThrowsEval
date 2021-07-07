@@ -253,12 +253,15 @@ def create_shots_frames_labels(data_dir, phase, labels_file, shot_traj_dir, p_de
     shot_traj_dict = {}
     for i, curr_motion_fname in enumerate(l_motion_file_names):
         print(f'====== {i} - {curr_motion_fname} =====')
+
         # if curr_motion_fname not in ['641.npy', '522.npy', '489.npy', '532.npy', '526.npy', '507.npy']:
         #     continue
         # Getting FT Shooter's motion
         curr_motion = np.load(osp.join(motions_dir, curr_motion_fname))
         # Getting Ball and Hoop Bounding boxes locations as matrix
         curr_motion_fname = osp.splitext(curr_motion_fname)[0]
+        if int(curr_motion_fname) <= 862:
+            continue
         curr_objs_info_fpath = f'{curr_motion_fname}.txt'
         curr_objs_info_fpath = osp.join(p_det_dir_fpath, curr_objs_info_fpath)
         a_bball_bb, a_hoop_bb = convert_ball_n_hoop_info_into_np(curr_objs_info_fpath)

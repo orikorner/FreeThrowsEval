@@ -30,9 +30,14 @@ class Moderator(object):
         self.cross_ent_loss = nn.CrossEntropyLoss() # TODO: .to(self.device)
         # set optimizer
         self.optimizer = optim.Adam(self.net.parameters(), lr)
+
+        # Scheduler - EXP LR
         self.scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, 0.99)
+        # Scheduler - Multi Step
         # milestones = [round(n_epochs * 0.8), round(n_epochs * 0.9)]
         # self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=milestones, gamma=0.1)
+        # Scheduler - Plat
+        # self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, patience=5, factor=0.5, verbose=True)
 
     def forward(self, data):
         inputs = data['motion'].to(self.device)
@@ -91,8 +96,9 @@ class Moderator(object):
         loss.backward()
         self.optimizer.step()
 
-    def update_learning_rate(self):
+    def update_learning_rate(self, metrics):
         self.scheduler.step()
+        # self.scheduler.step(metrics)
         # self.scheduler.step(self.curr_epoch)
 
     def train_func(self, data):

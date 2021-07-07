@@ -349,6 +349,12 @@ def extract_hoop_info_into_np(objs_info_fpath):
     return np.array(hoop_bb_info)
 
 
+def flip_horizontaly(in_array):
+    for i in range(len(in_array)):
+        in_array[i][0] = 1280 - in_array[i][0]
+    return in_array
+
+
 if __name__ == '__main__':
     args = parse_args()
 
@@ -371,10 +377,7 @@ if __name__ == '__main__':
 
     for i, curr_clip_name in enumerate(clips):
         curr_motion_name = curr_clip_name.split(".")[0]
-        # if curr_motion_name == '109' or curr_motion_name == '0' or curr_motion_name == '10' or \
-        #         100 <= int(curr_motion_name) <= 108:
-        #     continue
-        # if i <= 227:
+        # if int(curr_motion_name) <= 862:
         #     continue
         curr_shot_rl_frame = shot_rel_df.loc[shot_rel_df['video_name'] == int(curr_motion_name)]['shot_frame'].item()
         a_hoop_bb = extract_hoop_info_into_np(osp.join(detections_dir, f'{curr_motion_name}.txt'))
@@ -385,6 +388,18 @@ if __name__ == '__main__':
         shot_traj = np.load(osp.join(shot_traj_dir, curr_motion_name))
 
         motion = np.load(osp.join(motion_dir, curr_motion_name))
+
+        # if shot_traj[0][0] > shot_traj[-1][0]:
+        #     shot_traj = flip_horizontaly(shot_traj)
+        #
+        #     for t_i in range(motion.shape[2]):
+        #         motion[:, :, t_i] = flip_horizontaly(motion[:, :, t_i])
+        #
+        #     a_hoop_bb = a_hoop_bb.reshape((-1, 2, 2))
+        #     for t_j in range(a_hoop_bb.shape[0]):
+        #         a_hoop_bb[t_j, :, :] = flip_horizontaly(a_hoop_bb[t_j, :, :])
+        #     a_hoop_bb = a_hoop_bb.reshape((-1, 4))
+
         capture = cv2.VideoCapture(osp.join(clips_dir, curr_clip_name))
         width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))

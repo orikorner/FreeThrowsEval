@@ -42,6 +42,7 @@ class PrintLayer(nn.Module):
             print('(?)(?)(?)(?)(?)(?)(?)(?)(?)(?)(?)(?)(?)(?)(?)(?)(?)(?)(?)(?)(?)(?)(?)(?)(?)')
         else:
             print(f'(?) {self.layer_name} - {self.msg}: {x.shape}')
+
         return x
 
 
@@ -59,7 +60,7 @@ class Encoder(nn.Module):
 
         if dbg_mode:
             dbg_header_msg = f'nr_layer:{nr_layer}, channels:{channels}, compress:{compress}, kernel_size:{kernel_size},\n(?) convpool:{convpool}, global_pool:{global_pool} '
-            model.append(PrintLayer(layer_name=f'General Info', msg=dbg_header_msg, is_header=True))
+            model.append(PrintLayer(layer_name=f'General Info', msg=dbg_header_msg, is_header=True, dbg_mode=dbg_mode))
 
         for i in range(nr_layer):
             if convpool is None:
@@ -229,7 +230,6 @@ class FtNet(nn.Module):
         fc_out = self.fc2_print(fc_out)
         fc_out = self.fc3(fc_out)
         fc_out = self.fc3_print(fc_out)
-
         # feat_map = feat_map.reshape(-1, 768)
         # feat_map.unsqueeze_(2)
         # feat_map.unsqueeze_(3)

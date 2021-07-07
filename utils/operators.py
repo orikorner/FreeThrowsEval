@@ -34,14 +34,14 @@ def trans_motion_inv(motion, sx=256, sy=256, velocity=None):
     return motion_inv + centers.reshape((1, 2, -1))
 
 
-def normalize_motion(motion, mean_pose, std_pose):
-    """
-    :param motion: (J, 2, T)
-    :param mean_pose: (J, 2)
-    :param std_pose: (J, 2)
-    :return:
-    """
-    return (motion - mean_pose[:, :, np.newaxis]) / std_pose[:, :, np.newaxis]
+# def normalize_motion(motion, mean_pose, std_pose):
+#     """
+#     :param motion: (J, 2, T)
+#     :param mean_pose: (J, 2)
+#     :param std_pose: (J, 2)
+#     :return:
+#     """
+#     return (motion - mean_pose[:, :, np.newaxis]) / std_pose[:, :, np.newaxis]
 
 
 def normalize_motion_inv(motion, mean_pose, std_pose):
@@ -50,10 +50,10 @@ def normalize_motion_inv(motion, mean_pose, std_pose):
     return motion * std_pose[:, :, np.newaxis] + mean_pose[:, :, np.newaxis]
 
 
-def preprocess_motion2d(motion, mean_pose, std_pose):
-    motion_trans = normalize_motion(trans_motion2d(motion), mean_pose, std_pose)
-    motion_trans = motion_trans.reshape((-1, motion_trans.shape[-1]))
-    return torch.Tensor(motion_trans).unsqueeze(0)
+# def preprocess_motion2d(motion, mean_pose, std_pose):
+#     motion_trans = normalize_motion(trans_motion2d(motion), mean_pose, std_pose)
+#     motion_trans = motion_trans.reshape((-1, motion_trans.shape[-1]))
+#     return torch.Tensor(motion_trans).unsqueeze(0)
 
 
 def postprocess_motion2d(motion, mean_pose, std_pose, sx=256, sy=256):

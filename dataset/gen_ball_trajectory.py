@@ -54,6 +54,8 @@ def unite_frames_ball_positions_into_file(detections_dir, out_dir, conf_threshol
 
     l_det_dirs = sorted(os.listdir(detections_dir))
     for det_dir in l_det_dirs:  # Iterating Directories
+        # if int(det_dir) <= 862:
+        #     continue
         vid_out_det_info_file = osp.join(out_dir, det_dir)
         vid_out_det_info_file = f'{vid_out_det_info_file}.txt'
         det_dir = osp.join(detections_dir, det_dir)

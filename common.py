@@ -52,13 +52,16 @@ class Config:
     # foot_idx = [20, 21, 26, 27]
     # footvel_loss_weight = 0.1
 
-    nr_epochs = 150
+    pre_release_n_frames = 35
+    post_release_n_frames = 10
+
+    nr_epochs = 250
     batch_size = 24
     num_workers = 0  # TODO
     lr = 1e-3
 
     save_frequency = 25
-    val_frequency = 13
+    val_frequency = 14 # 10
 
     def initialize(self, args):
         self.name = args.name if hasattr(args, 'name') else 'skeleton'
@@ -67,7 +70,7 @@ class Config:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_ids)
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.dbg_mode = args.dbg_mode
-        self.aug = args.aug
+        # self.aug = args.aug
         self.exp_dir = osp.join(self.save_dir, 'exp_' + self.name)
         self.log_dir = osp.join(self.exp_dir, 'log/')
         self.model_dir = osp.join(self.exp_dir, 'model/')

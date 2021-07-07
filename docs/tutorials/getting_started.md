@@ -23,3 +23,6 @@ FreeThrowsEval
 
 2.  Train model, Run:
 python train.py --name <name>
+
+3. (Optional) - View on tensorboard, Run:
+tensorboard --logdir=train_log/<name>/log

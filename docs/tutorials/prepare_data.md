@@ -66,3 +66,6 @@ FreeThrowsEval
 │   │   ├── bball_trajectories # Containing the pre processing done over yolo_detections
 │   │   ├── shot_trajectories # Containing ball trajectory from shot frame to hoop impact frame
 
+******* TMP ********
+Flip Horizontaly:
+python dataset/flip_left_shooters.py --data-dir bbfts_data/<phase>
