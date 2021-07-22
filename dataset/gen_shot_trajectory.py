@@ -254,14 +254,13 @@ def create_shots_frames_labels(data_dir, phase, labels_file, shot_traj_dir, p_de
     for i, curr_motion_fname in enumerate(l_motion_file_names):
         print(f'====== {i} - {curr_motion_fname} =====')
 
-        # if curr_motion_fname not in ['641.npy', '522.npy', '489.npy', '532.npy', '526.npy', '507.npy']:
+        # if curr_motion_fname not in ['109.npy']:
         #     continue
         # Getting FT Shooter's motion
         curr_motion = np.load(osp.join(motions_dir, curr_motion_fname))
         # Getting Ball and Hoop Bounding boxes locations as matrix
         curr_motion_fname = osp.splitext(curr_motion_fname)[0]
-        if int(curr_motion_fname) <= 862:
-            continue
+
         curr_objs_info_fpath = f'{curr_motion_fname}.txt'
         curr_objs_info_fpath = osp.join(p_det_dir_fpath, curr_objs_info_fpath)
         a_bball_bb, a_hoop_bb = convert_ball_n_hoop_info_into_np(curr_objs_info_fpath)
@@ -269,8 +268,8 @@ def create_shots_frames_labels(data_dir, phase, labels_file, shot_traj_dir, p_de
         shot_frame_i = find_shot_frame_index(curr_motion, a_bball_bb, a_hoop_bb)
         shot_traj_dict[curr_motion_fname] = shot_frame_i
         # Making shot trajectory
-        if curr_motion_fname == '109':
-            continue
+        # if curr_motion_fname == '109':
+        #     continue
         a_shot_trajectory, ball_hit_hoop_frame = make_ball_trajectory_array(a_bball_bb, a_hoop_bb,
                                                                             shot_frame_i=shot_frame_i)
         print(f'Shot Release: {shot_frame_i} - Ball hit Hoop: {ball_hit_hoop_frame} - Trajectory length: {len(a_shot_trajectory)}')

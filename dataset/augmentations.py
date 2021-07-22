@@ -49,6 +49,10 @@ class Resize(object):
         :param sample: input sample (np.array)
         :return: resized sample
         """
+        # xs = sample[:, 0, :]
+        # ys = sample[:, 1, :]
+        # return np.concatenate((xs, ys), axis=0)
+        # TODO
         return sample.reshape(self.scale)
 
     def __repr__(self):
@@ -91,22 +95,48 @@ class GaussianNoise(object):
         :param sample: input sample (np.array)
         :return: sample with added gaussian noise
         """
-        # print(sample[:, 0])
         sigma = np.ones(sample.shape) * self.std_pose
         mean = np.ones(sample.shape) * self.mean_pose
         sample = sample + np.random.normal(size=sample.shape) * sigma + mean
-        # sample = sample + np.random.normal(size=sample.shape) * self.std_pose.reshape(-1, 1) + self.mean_pose.reshape(-1, 1)
-        # sample = sample + np.random.normal(0, 1.5, size=(sample.shape))
-        # print()
-        # print(sample[:, 0])
-        # exit()
         return sample
-        # return sample + np.random.normal(size=sample.shape) * self.std_pose.reshape(-1, 1) + self.mean_pose.reshape(-1, 1)
 
     def __repr__(self):
         repr_str = (
             f'{self.__class__.__name__}('
             f'Mean: {self.mean_pose},'
             f'Sigma: {self.std_pose})'
+            )
+        return repr_str
+
+
+class RandomZeroMask(object):
+    """
+    Zeros out random percentage of indices
+    """
+
+    def __init__(self, p):
+        """
+        :param p: percentage of indices to mask
+        """
+        self.p = p
+
+    def __call__(self, sample):
+        """
+        :param sample: input sample (np.array)
+        :return: masked sample
+        """
+        x, y = sample.shape
+        n_select = int((self.p * x * y) // 2)
+        rand_j = np.random.choice(np.arange(x), n_select, replace=False)
+        rand_t = np.random.choice(np.arange(y), n_select, replace=False)
+
+        sample[rand_j, rand_t] = 0.0
+        return sample
+
+    def __repr__(self):
+        repr_str = (
+            f'{self.__class__.__name__}('
+            f'Shape: {self.shape},'
+            f'P: {self.p})'
             )
         return repr_str

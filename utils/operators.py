@@ -5,8 +5,15 @@ import os.path as osp
 import json
 from scipy.ndimage import gaussian_filter1d
 
+# Joint Names:  Head, Neck,
+#               RightArm, RightForeArm, RightHand,
+#               LeftArm, LeftForeArm, LeftHand,
+#               Hips,
+#               RightUpLeg, RightLeg, RightFoot,
+#               LeftUpLeg, LeftLeg, LeftFoot
 
-def trans_motion2d(motion2d):
+
+def trans_motion2d_to_hips_coord_sys(motion2d):
     # subtract centers to local coordinates
     centers = motion2d[8, :, :]
     motion_proj = motion2d - centers
@@ -15,7 +22,59 @@ def trans_motion2d(motion2d):
     velocity = np.c_[np.zeros((2, 1)), centers[:, 1:] - centers[:, :-1]].reshape(1, 2, -1)
     motion_proj = np.r_[motion_proj[:8], motion_proj[9:], velocity]
 
+    # motion_proj = np.r_[motion_proj[:8], centers.reshape((1, 2, -1)), motion_proj[9:]]
+
     return motion_proj
+
+
+def trans_motion2d_to_hoop_coord_sys(motion, hoop_pos, num_frames=45):
+    hoop_bb_x = int(hoop_pos[2])
+    hoop_bb_y = (int(hoop_pos[1]) + int(hoop_pos[3])) // 2
+    hoop_np = np.array([hoop_bb_x, hoop_bb_y])
+
+    # motion = motion - np.tile(hoop_np, (num_frames, 1)).T
+    motion = -1 * (motion - np.tile(hoop_np, (num_frames, 1)).T)
+
+    return motion
+
+
+def calc_pixels_to_real_units_scaling_factor(motion, hoop_pos, alpha=1.0):
+    real_hoop_to_floor_dist = 10.0 * alpha
+    real_backboard_to_ft_line_dist = 15.0 * alpha
+    hoop_bb_x = int(hoop_pos[2])
+    hoop_bb_y = (int(hoop_pos[1]) + int(hoop_pos[3])) // 2
+    person_y = -1
+    person_x = -1
+    hips_x = motion[8, 0, -10:-5]
+    hips_x = hips_x[hips_x != 0]
+    hips_y = motion[8, 1, -10:-5]
+    hips_y = hips_y[hips_y != 0]
+    head_y = motion[0, 1, -10:-5]
+    head_y = head_y[head_y != 0]
+
+    r_leg_x = motion[11, 0, -10:-5]
+    r_leg_x = r_leg_x[r_leg_x != 0]
+    r_leg_y = motion[11, 1, -10:-5]
+    r_leg_y = r_leg_y[r_leg_y != 0]
+
+    l_leg_x = motion[14, 0, -10:-5]
+    l_leg_x = l_leg_x[l_leg_x != 0]
+    l_leg_y = motion[14, 1, -10:-5]
+    l_leg_y = l_leg_y[l_leg_y != 0]
+    # Get X and Y coordinate of free throw line center
+    if len(l_leg_y) > 0 and len(r_leg_y) > 0:
+        person_y = (np.mean(l_leg_y) + np.mean(r_leg_y)) // 2
+        person_x = max(np.mean(l_leg_x), np.mean(r_leg_x)) + 2
+    else:
+        # Feet was not found by pose detection, probably occluded, so we calculate it
+        print('!!!!!! Did not find any feet to Scale motion !!!!')
+        person_y = np.mean(hips_y) + abs(np.mean(head_y) - np.mean(hips_y))
+        person_x = np.mean(hips_x) + 2
+
+    scale_factor_y = float(real_hoop_to_floor_dist / abs(hoop_bb_y - person_y))
+    scale_factor_x = float(real_backboard_to_ft_line_dist / abs(hoop_bb_x - person_x))
+
+    return scale_factor_x, scale_factor_y
 
 
 def trans_motion_inv(motion, sx=256, sy=256, velocity=None):
@@ -34,26 +93,10 @@ def trans_motion_inv(motion, sx=256, sy=256, velocity=None):
     return motion_inv + centers.reshape((1, 2, -1))
 
 
-# def normalize_motion(motion, mean_pose, std_pose):
-#     """
-#     :param motion: (J, 2, T)
-#     :param mean_pose: (J, 2)
-#     :param std_pose: (J, 2)
-#     :return:
-#     """
-#     return (motion - mean_pose[:, :, np.newaxis]) / std_pose[:, :, np.newaxis]
-
-
 def normalize_motion_inv(motion, mean_pose, std_pose):
     if len(motion.shape) == 2:
         motion = motion.reshape(-1, 2, motion.shape[-1])
     return motion * std_pose[:, :, np.newaxis] + mean_pose[:, :, np.newaxis]
-
-
-# def preprocess_motion2d(motion, mean_pose, std_pose):
-#     motion_trans = normalize_motion(trans_motion2d(motion), mean_pose, std_pose)
-#     motion_trans = motion_trans.reshape((-1, motion_trans.shape[-1]))
-#     return torch.Tensor(motion_trans).unsqueeze(0)
 
 
 def postprocess_motion2d(motion, mean_pose, std_pose, sx=256, sy=256):

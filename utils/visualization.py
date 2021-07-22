@@ -377,7 +377,7 @@ if __name__ == '__main__':
 
     for i, curr_clip_name in enumerate(clips):
         curr_motion_name = curr_clip_name.split(".")[0]
-        # if int(curr_motion_name) <= 862:
+        # if int(curr_motion_name) != 109:
         #     continue
         curr_shot_rl_frame = shot_rel_df.loc[shot_rel_df['video_name'] == int(curr_motion_name)]['shot_frame'].item()
         a_hoop_bb = extract_hoop_info_into_np(osp.join(detections_dir, f'{curr_motion_name}.txt'))

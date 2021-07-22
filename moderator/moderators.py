@@ -32,10 +32,16 @@ class Moderator(object):
         self.optimizer = optim.Adam(self.net.parameters(), lr)
 
         # Scheduler - EXP LR
-        self.scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, 0.99)
+        # self.scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, 0.99)
         # Scheduler - Multi Step
-        # milestones = [round(n_epochs * 0.8), round(n_epochs * 0.9)]
-        # self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=milestones, gamma=0.1)
+        # milestones = [149]
+        milestones = [40, 90]
+        # milestones = [85, 120]
+        self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=milestones, gamma=0.1)
+        # Scheduler - Cyclic
+        # self.optimizer = optim.Adam(self.net.parameters(), 0.00001)
+        # self.scheduler = torch.optim.lr_scheduler.CyclicLR(self.optimizer, base_lr=0.00001, max_lr=0.0001, step_size_up=250,
+        #                                                    mode="triangular", cycle_momentum=False)
         # Scheduler - Plat
         # self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, patience=5, factor=0.5, verbose=True)
 
@@ -99,7 +105,6 @@ class Moderator(object):
     def update_learning_rate(self, metrics):
         self.scheduler.step()
         # self.scheduler.step(metrics)
-        # self.scheduler.step(self.curr_epoch)
 
     def train_func(self, data):
         self.net.train()

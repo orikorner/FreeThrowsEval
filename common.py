@@ -41,6 +41,7 @@ class Config:
     # network channels
     mot_en_channels = None
     body_en_channels = None
+    cls_head_dims = None
     # view_en_channels = None
     # de_channels = None
 
@@ -55,13 +56,14 @@ class Config:
     pre_release_n_frames = 35
     post_release_n_frames = 10
 
-    nr_epochs = 250
-    batch_size = 24
+    nr_epochs = 200
+    # batch_size = 24
     num_workers = 0  # TODO
     lr = 1e-3
-
-    save_frequency = 25
-    val_frequency = 14 # 10
+    train_set_len = 323
+    val_set_len = 50
+    save_frequency = 100
+    # val_frequency = 14  # 10
 
     def initialize(self, args):
         self.name = args.name if hasattr(args, 'name') else 'skeleton'
@@ -78,7 +80,8 @@ class Config:
 
         if True: #self.name == 'skeleton':
             self.mot_en_channels = [self.len_joints + 2, 64, 96, 128]
-            self.body_en_channels = [self.len_joints, 32, 48, 64]
+            self.body_en_channels = [self.len_joints + 2, 32, 48, 64]
+            self.cls_head_dims = [768, 192, 48, 2]
             # self.mot_en_channels = [self.len_joints + 2, 96, 128, 192]
             # self.body_en_channels = [self.len_joints, 64, 96, 128]
             # self.de_channels = [self.mot_en_channels[-1] + self.body_en_channels[-1], 128, 64, self.len_joints + 2]
