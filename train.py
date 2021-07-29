@@ -38,7 +38,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     # parser.add_argument('--dataset', type=str, help='path to poses')
     parser.add_argument('--name', type=str, default='skeleton', help='exp name')
-    parser.add_argument('-c', '--continue', dest='continue_path', type=str, required=False)
+    parser.add_argument('--checkpoint', type=str, default=None, help='path to weights')
+    # parser.add_argument('-c', '--continue', dest='continue_path', type=str, required=False)
     parser.add_argument('-g', '--gpu_ids', type=int, default=0, required=False, help="specify gpu ids")
     parser.add_argument('-aug', action='store_true', default=False, help="specify augmentations")
     parser.add_argument('--dbg-mode', action='store_true', default=False, help="Prints model info")
@@ -89,6 +90,8 @@ def main():
 
             net = get_network(config)
             net = net.to(config.device)
+            # if args.checkpoint is not None:
+
             # create tensorboard writer
             train_tb = CorrectedSummaryWriter(os.path.join(config.log_dir, f'Train_BSize_{curr_batch}_LR_{curr_lr}'))
             val_tb = CorrectedSummaryWriter(os.path.join(config.log_dir, f'Val_BSize_{curr_batch}_LR_{curr_lr}'))
@@ -111,6 +114,13 @@ def main():
                 pbar = tqdm(train_loader)
                 for b, data in enumerate(pbar):
 
+                    # if len(data['label']) < 16:
+                    #     if once:
+                    #         print('LABELS: ')
+                    #         print(data['label'])
+                    #         print()
+                    #         # once = False
+                    #     continue
                     # if once:
                         # train_tb.add_graph(net, data['motion'].to(config.device))
                         # train_tb.add_graph(net, torch.ones((1, 30, 45)).to(config.device))
@@ -138,9 +148,9 @@ def main():
                         # running_losses.append(v)
                         train_tb.add_scalar(k, v, clock.step)
 
-                    labels = data['label']
-                    predictions, _, correct = get_predictions(outputs,
-                                                              data['name'], data['motion'].to(config.device), labels, w_print=False)
+                    # labels = data['label']
+                    # predictions, _, correct = get_predictions(outputs,
+                    #                                           data['name'], data['motion'].to(config.device), labels, w_print=False)
 
                     pbar.set_description("EPOCH[{}][{}/{}]".format(e, b, len(train_loader)))
                     pbar.set_postfix(OrderedDict({"Loss": sum(losses_values.values())}))

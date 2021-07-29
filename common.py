@@ -56,7 +56,7 @@ class Config:
     pre_release_n_frames = 35
     post_release_n_frames = 10
 
-    nr_epochs = 200
+    nr_epochs = 150
     # batch_size = 24
     num_workers = 0  # TODO
     lr = 1e-3

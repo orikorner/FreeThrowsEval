@@ -27,18 +27,17 @@ def trans_motion2d_to_hips_coord_sys(motion2d):
     return motion_proj
 
 
-def trans_motion2d_to_hoop_coord_sys(motion, hoop_pos, num_frames=45):
+def trans_motion2d_to_hoop_coord_sys(motion, hoop_pos):
+    _, _, num_frames = motion.shape
     hoop_bb_x = int(hoop_pos[2])
     hoop_bb_y = (int(hoop_pos[1]) + int(hoop_pos[3])) // 2
     hoop_np = np.array([hoop_bb_x, hoop_bb_y])
-
     # motion = motion - np.tile(hoop_np, (num_frames, 1)).T
     motion = -1 * (motion - np.tile(hoop_np, (num_frames, 1)).T)
-
     return motion
 
 
-def calc_pixels_to_real_units_scaling_factor(motion, hoop_pos, alpha=1.0):
+def calc_pixels_to_real_units_scaling_factor(motion, hoop_pos, alpha=0.4):
     real_hoop_to_floor_dist = 10.0 * alpha
     real_backboard_to_ft_line_dist = 15.0 * alpha
     hoop_bb_x = int(hoop_pos[2])

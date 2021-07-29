@@ -40,7 +40,7 @@ class Moderator(object):
         self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=milestones, gamma=0.1)
         # Scheduler - Cyclic
         # self.optimizer = optim.Adam(self.net.parameters(), 0.00001)
-        # self.scheduler = torch.optim.lr_scheduler.CyclicLR(self.optimizer, base_lr=0.00001, max_lr=0.0001, step_size_up=250,
+        # self.scheduler = torch.optim.lr_scheduler.CyclicLR(self.optimizer, base_lr=0.00001, max_lr=0.0001, step_size_up=5,
         #                                                    mode="triangular", cycle_momentum=False)
         # Scheduler - Plat
         # self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, patience=5, factor=0.5, verbose=True)
@@ -84,12 +84,15 @@ class Moderator(object):
 
     def save_network(self, name=None):
         if name is None:
-            # save_path = osp.join(self.model_dir, "model_epoch{}.pth".format(self.curr_epoch))
             save_path = osp.join(self.model_dir, "model_epoch{}.pth".format(self.clock.epoch))
         else:
             save_path = osp.join(self.model_dir, name)
         torch.save(self.net.cpu().state_dict(), save_path)
         self.net.to(self.device)
+
+    # def pre_train_load_network(self, ckpt_path):
+    #     state_dict = torch.load(ckpt_path)
+    #     self.net.load_state_dict(state_dict)
 
     def load_network(self, epoch):
         load_path = osp.join(self.model_dir, "model_epoch{}.pth".format(epoch))
