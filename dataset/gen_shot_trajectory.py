@@ -253,8 +253,9 @@ def create_shots_frames_labels(data_dir, phase, labels_file, shot_traj_dir, p_de
     shot_traj_dict = {}
     for i, curr_motion_fname in enumerate(l_motion_file_names):
         print(f'====== {i} - {curr_motion_fname} =====')
-
-        # if curr_motion_fname not in ['109.npy']:
+        # if curr_motion_fname in ['255.npy', '293.npy', '299.npy', '31.npy', '313.npy', '314.npy', '334.npy']:
+        #     continue
+        # if curr_motion_fname not in ['44.npy']:
         #     continue
         # Getting FT Shooter's motion
         curr_motion = np.load(osp.join(motions_dir, curr_motion_fname))
@@ -268,8 +269,6 @@ def create_shots_frames_labels(data_dir, phase, labels_file, shot_traj_dir, p_de
         shot_frame_i = find_shot_frame_index(curr_motion, a_bball_bb, a_hoop_bb)
         shot_traj_dict[curr_motion_fname] = shot_frame_i
         # Making shot trajectory
-        # if curr_motion_fname == '109':
-        #     continue
         a_shot_trajectory, ball_hit_hoop_frame = make_ball_trajectory_array(a_bball_bb, a_hoop_bb,
                                                                             shot_frame_i=shot_frame_i)
         print(f'Shot Release: {shot_frame_i} - Ball hit Hoop: {ball_hit_hoop_frame} - Trajectory length: {len(a_shot_trajectory)}')

@@ -36,9 +36,10 @@ class CorrectedSummaryWriter(SummaryWriter):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    # parser.add_argument('--dataset', type=str, help='path to poses')
+
     parser.add_argument('--name', type=str, default='skeleton', help='exp name')
     parser.add_argument('--checkpoint', type=str, default=None, help='path to weights')
+    parser.add_argument('--pretrain', action='store_true', default=False, help='whether to pre train on trajectory')
     # parser.add_argument('-c', '--continue', dest='continue_path', type=str, required=False)
     parser.add_argument('-g', '--gpu_ids', type=int, default=0, required=False, help="specify gpu ids")
     parser.add_argument('-aug', action='store_true', default=False, help="specify augmentations")
@@ -79,19 +80,87 @@ def main():
 
     config.initialize(args)
 
+    # curr_batch = 8
+    # curr_lr = 0.00001
+    #
+    # net = get_network(config)
+    # if args.checkpoint is not None:
+    #     net.load_state_dict(torch.load(args.checkpoint))
+    # net = net.to(config.device)
+    #
+    # tr_moder = get_training_moderator(config, net, curr_lr)
+    # clock = tr_moder.clock
+    #
+    # train_tb = CorrectedSummaryWriter(os.path.join(config.log_dir, f'Train_BSize_{curr_batch}_LR_{curr_lr}'))
+    # val_tb = CorrectedSummaryWriter(os.path.join(config.log_dir, f'Val_BSize_{curr_batch}_LR_{curr_lr}'))
+    #
+    # train_loader = get_dataloader('extras', config, curr_batch, config.num_workers)
+    # val_loader = get_dataloader('test', config, config.val_set_len, config.num_workers, shuffle=False)
+    # val_loader = cycle(val_loader)
+    #
+    # # start training
+    # for e in range(config.nr_epochs):
+    #     # begin iteration
+    #     running_losses = []
+    #
+    #     pbar = tqdm(train_loader)
+    #     for b, data in enumerate(pbar):
+    #
+    #         # train step
+    #         outputs, losses = tr_moder.train_func(data)
+    #
+    #         losses_values = {k: v.item() for k, v in losses.items()}
+    #
+    #         # record loss to tensorboard - key is loss type
+    #         for k, v in losses_values.items():
+    #             running_losses.append(v)
+    #             # train_tb.add_scalar(k, v, clock.step)
+    #
+    #         pbar.set_description("EPOCH[{}][{}/{}]".format(e, b, len(train_loader)))
+    #         pbar.set_postfix(OrderedDict({"Loss": sum(losses_values.values())}))
+    #
+    #         clock.tick()
+    #
+    #     # Getting Validation Loss and Accuracy (over entire validation set)
+    #     data = next(val_loader)
+    #     outputs, losses = tr_moder.val_func(data)
+    #
+    #     losses_values = {k: v.item() for k, v in losses.items()}
+    #     val_loss = losses_values['mse']
+    #
+    #     train_mean_loss = sum(running_losses) / len(running_losses)
+    #     val_tb.add_scalars('Losses',
+    #                        {'Train Loss': train_mean_loss,
+    #                         'Val Loss': val_loss},
+    #                        global_step=e)
+    #     print(f'{train_mean_loss} - {val_loss}')
+    #
+    #     train_tb.add_scalar('learning_rate', tr_moder.optimizer.param_groups[-1]['lr'], clock.epoch)
+    #     tr_moder.update_learning_rate(e)
+    #
+    #     if clock.epoch % config.save_frequency == 0:
+    #         tr_moder.save_network()
+    #     tr_moder.save_network('latest.pth.tar')
+    #     clock.tock()
+    #
+    # train_tb.flush()
+    # val_tb.flush()
+    # train_tb.close()
+    # val_tb.close()
+    # exit()
     label_img = None
     once = True
     batches = [16]
-    lr_list = [0.0001]
+    lr_list = [0.0001, 0.000101, 0.000102, 0.000103, 0.000104, 0.000105, 0.000106, 0.000107]
     classes = ['X', 'V']
     for curr_batch in batches:
         for curr_lr in lr_list:
             print(f'==================== {curr_batch} - {curr_lr} ===============================')
 
             net = get_network(config)
+            if args.checkpoint is not None:
+                net.load_my_state_dict(torch.load(args.checkpoint))
             net = net.to(config.device)
-            # if args.checkpoint is not None:
-
             # create tensorboard writer
             train_tb = CorrectedSummaryWriter(os.path.join(config.log_dir, f'Train_BSize_{curr_batch}_LR_{curr_lr}'))
             val_tb = CorrectedSummaryWriter(os.path.join(config.log_dir, f'Val_BSize_{curr_batch}_LR_{curr_lr}'))
@@ -114,13 +183,6 @@ def main():
                 pbar = tqdm(train_loader)
                 for b, data in enumerate(pbar):
 
-                    # if len(data['label']) < 16:
-                    #     if once:
-                    #         print('LABELS: ')
-                    #         print(data['label'])
-                    #         print()
-                    #         # once = False
-                    #     continue
                     # if once:
                         # train_tb.add_graph(net, data['motion'].to(config.device))
                         # train_tb.add_graph(net, torch.ones((1, 30, 45)).to(config.device))
@@ -149,8 +211,7 @@ def main():
                         train_tb.add_scalar(k, v, clock.step)
 
                     # labels = data['label']
-                    # predictions, _, correct = get_predictions(outputs,
-                    #                                           data['name'], data['motion'].to(config.device), labels, w_print=False)
+                    # predictions, _, correct = get_predictions(outputs, data['name'], labels, w_print=False)
 
                     pbar.set_description("EPOCH[{}][{}/{}]".format(e, b, len(train_loader)))
                     pbar.set_postfix(OrderedDict({"Loss": sum(losses_values.values())}))
@@ -165,8 +226,7 @@ def main():
 
                         labels = data['label']
                         w_print = True if (e == config.nr_epochs - 1) else False
-                        predictions, _, correct = get_predictions(outputs,
-                                                        data['name'], data['motion'].to(config.device), labels, w_print=True)
+                        predictions, _, correct = get_predictions(outputs, data['name'], labels, w_print=True)
                         val_acc = correct / len(labels)
 
                         # Getting Train Loss and Accuracy (over entire training set)
@@ -177,8 +237,7 @@ def main():
                         train_loss = losses_values['cross_entropy']
 
                         labels = data['label']
-                        predictions, _, correct = get_predictions(outputs,
-                                                        data['name'], data['motion'].to(config.device), labels, w_print=False)
+                        predictions, _, correct = get_predictions(outputs, data['name'], labels, w_print=False)
                         train_acc = correct / len(labels)
 
                         # Feature Map Embeddings visualization

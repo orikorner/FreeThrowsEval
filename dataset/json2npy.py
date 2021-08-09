@@ -209,16 +209,15 @@ def locate_ft_shooter_in_clip(model, clip_fpath, num_samples, num_frames):
 
     w, h = disp_imgs[0].size
     box_bins = []
-    # if len(predictions[0][0]['boxes']) > 0:
-    #     box_bins = [[predictions[0][0]['boxes'][0].cpu().numpy()]]
-    for i in range(8, len(predictions)):
+    for i in range(len(predictions)):
         if len(predictions[i][0]['boxes']) == 0:
             continue
         # if predictions[i][0]['scores'][0].item() < 0.5:
         #     continue
         curr_box = predictions[i][0]['boxes'][0].cpu().numpy()
-        if len(predictions[i][0]['boxes']) > 1:
-            curr_box = predictions[i][0]['boxes'][1].cpu().numpy()
+        # Uncomment for case where 2nd top guy is FT shooter
+        # if len(predictions[i][0]['boxes']) > 1:
+        #     curr_box = predictions[i][0]['boxes'][1].cpu().numpy()
         if len(box_bins) == 0:
             box_bins.append([curr_box])
             continue
@@ -284,8 +283,8 @@ def find_closest_pose_numpy(np_poses_arr, target_pose):
             curr_min = curr_person_dist
             closest_pose = curr_person_joints
 
-    assert curr_min < 100000
-    assert closest_pose is not None
+    # assert curr_min < 100000
+    # assert closest_pose is not None
     return closest_pose
 
 
@@ -299,8 +298,8 @@ def find_closest_pose(poses_arr, target_pose):
             curr_min = curr_person_dist
             closest_pose = curr_person_joints
 
-    assert curr_min < 100000
-    assert closest_pose is not None
+    # assert curr_min < 100000
+    # assert closest_pose is not None
     return closest_pose
 
 
@@ -529,7 +528,7 @@ def json2npy(data_dir, state_dict, num_samples, smooth):
     for i, clip_name in enumerate(vids_kp_dirs):
         print(f'====== {i} - {clip_name} =====')
         # First we need to find the ft shooter in clip (bounding box)
-        # if clip_name != '180':
+        # if int(clip_name) not in [40,110,690,710,714,823,838,878,971,1021]:
         #     continue
         curr_clip_fpath = osp.join(clips_dir_fpath, clip_name)
         curr_clip_fpath = f'{curr_clip_fpath}.mp4'

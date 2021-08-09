@@ -12,7 +12,7 @@ OBJS_NOT_FOUND = '0 0 0 0 0,0 0 0 0 0\n'
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--data-dir', type=str, default='bbfts_data/train', help='path to data dir of a certain phase')
+    parser.add_argument('--data-dir', type=str, default='', help='path to data dir of a certain phase')
     parser.add_argument('--detections-dir', type=str, default='yolo_detections', help='dir of yolo detections')
     parser.add_argument('--out-dir', type=str, default='processed_yolo_detections', help='dir of processed detections')
     parser.add_argument('--conf-threshold', type=float, default=0.5, help='Object detection confidence threshold')
@@ -54,8 +54,9 @@ def unite_frames_ball_positions_into_file(detections_dir, out_dir, conf_threshol
 
     l_det_dirs = sorted(os.listdir(detections_dir))
     for det_dir in l_det_dirs:  # Iterating Directories
-        # if int(det_dir) <= 862:
+        # if int(det_dir) not in [40,110,690,710,714,823,838,878,971,1021]:
         #     continue
+
         vid_out_det_info_file = osp.join(out_dir, det_dir)
         vid_out_det_info_file = f'{vid_out_det_info_file}.txt'
         det_dir = osp.join(detections_dir, det_dir)

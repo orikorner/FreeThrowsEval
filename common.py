@@ -10,7 +10,7 @@ class Config:
     name = None
     device = None
     dbg_mode = False
-    aug = True
+    in_pretrain = False
 
     # dataset paths
     data_dir = './bbfts_data'
@@ -62,49 +62,36 @@ class Config:
     lr = 1e-3
     train_set_len = 323
     val_set_len = 50
-    save_frequency = 100
+    save_frequency = 20
     # val_frequency = 14  # 10
 
     def initialize(self, args):
         self.name = args.name if hasattr(args, 'name') else 'skeleton'
-        # self.use_triplet = not args.disable_triplet if hasattr(args, 'disable_triplet') else None
-        # self.use_footvel_loss = args.use_footvel_loss if hasattr(args, 'use_footvel_loss') else None
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_ids)
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.dbg_mode = args.dbg_mode
-        # self.aug = args.aug
+        self.dbg_mode = args.dbg_mode if hasattr(args, 'dbg_mode') else False
         self.exp_dir = osp.join(self.save_dir, 'exp_' + self.name)
         self.log_dir = osp.join(self.exp_dir, 'log/')
         self.model_dir = osp.join(self.exp_dir, 'model/')
         utils.ensure_dirs([self.log_dir, self.model_dir])
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_ids)
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.in_pretrain = args.pretrain if hasattr(args, 'pretrain') else False
 
-        if True: #self.name == 'skeleton':
+        if not self.in_pretrain:
             self.mot_en_channels = [self.len_joints + 2, 64, 96, 128]
             self.body_en_channels = [self.len_joints + 2, 32, 48, 64]
             self.cls_head_dims = [768, 192, 48, 2]
-            # self.mot_en_channels = [self.len_joints + 2, 96, 128, 192]
-            # self.body_en_channels = [self.len_joints, 64, 96, 128]
             # self.de_channels = [self.mot_en_channels[-1] + self.body_en_channels[-1], 128, 64, self.len_joints + 2]
             # self.view_angles = None
 
             self.meanpose_path = './bbfts_data/meanpose.npy'
             self.stdpose_path = './bbfts_data/stdpose.npy'
-        # elif self.name == 'view':
-        #     self.mot_en_channels = [self.len_joints + 2, 64, 96, 128]
-        #     self.view_en_channels = [self.len_joints, 64, 96, 128, 32]
-        #     self.de_channels = [self.mot_en_channels[-1] + self.view_en_channels[-1], 128, 64, self.len_joints + 2]
-        #
-        #     self.meanpose_path = './mixamo_data/meanpose_with_view.npy'
-        #     self.stdpose_path = './mixamo_data/stdpose_with_view.npy'
-        # else:
-        #     self.mot_en_channels = [self.len_joints + 2, 64, 96, 128]
-        #     self.body_en_channels = [self.len_joints, 32, 48, 64, 16]
-        #     self.view_en_channels = [self.len_joints, 32, 48, 64, 8]
-        #     self.de_channels = [self.mot_en_channels[-1] + self.body_en_channels[-1] + self.view_en_channels[-1],
-        #                         128, 64, self.len_joints + 2]
-        #
-        #     self.meanpose_path = './mixamo_data/meanpose_with_view.npy'
-        #     self.stdpose_path = './mixamo_data/stdpose_with_view.npy'
+        else:
+            self.mot_en_channels = [self.len_joints + 2, 64, 96, 128]
+            self.body_en_channels = [self.len_joints + 2, 32, 48, 64]
+            self.cls_head_dims = [768, 192, 48, 4]
+
+            self.meanpose_path = './bbfts_data/extras/meanpose.npy'
+            self.stdpose_path = './bbfts_data/extras/stdpose.npy'
 
 
 config = Config()

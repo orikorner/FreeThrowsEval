@@ -64,6 +64,7 @@ def find_basket_and_save(data_dir, clip_name):
 
 
 def flip_horizontaly(in_array, h_dim=1280):
+    "305 153 359 168 - > 974,154,921,169"
     for i in range(len(in_array)):
         in_array[i][0] = h_dim - in_array[i][0]
 
@@ -76,39 +77,40 @@ if __name__ == '__main__':
     shot_traj_dir = osp.join(args.data_dir, args.shot_traj_dir)
     motion_dir = osp.join(args.data_dir, args.motion_dir)
     motions = sorted(os.listdir(motion_dir))
+
     l_hoops_info_str = []
     for i, curr_motion_name in enumerate(motions):
-        # curr_clip_name = curr_motion_name.split(".")[0]
-        # if curr_motion_name == '109.npy':
+
+        # if curr_motion_name in ['255.npy', '293.npy', '299.npy', '31.npy', '313.npy', '314.npy', '334.npy']:
         #     l_hoops_info_str.append('0,0,0,0')
         #     continue
+        # if curr_motion_name not in ['40.npy', '110.npy', '690.npy', '710.npy', '714.npy', '823.npy', '838.npy', '878.npy', '971.npy', '1021.npy']:
+        #     continue
+
         a_hoop_bb = find_basket_and_save(args.data_dir, osp.splitext(curr_motion_name)[0])
 
         motion_fpath = osp.join(motion_dir, curr_motion_name)
         motion = np.load(motion_fpath)
 
-        shot_traj = np.load(osp.join(shot_traj_dir, curr_motion_name))
+        shot_traj_fpath = osp.join(shot_traj_dir, curr_motion_name)
+        shot_traj = np.load(shot_traj_fpath)
 
         if shot_traj[0][0] > shot_traj[-1][0]:
             print(f'====== {i}. Flipping: {curr_motion_name} =====')
-            # shot_traj = flip_horizontaly(shot_traj)
+            shot_traj = flip_horizontaly(shot_traj)
 
             for t_i in range(motion.shape[2]):
                 motion[:, :, t_i] = flip_horizontaly(motion[:, :, t_i])
-
 
             a_hoop_bb = a_hoop_bb.reshape((2, 2))
             a_hoop_bb = flip_horizontaly(a_hoop_bb)
             a_hoop_bb = a_hoop_bb.reshape((4))
 
-            # a_hoop_bb = a_hoop_bb.reshape((-1, 2, 2))
-            # for t_j in range(a_hoop_bb.shape[0]):
-            #     a_hoop_bb[t_j, :, :] = flip_horizontaly(a_hoop_bb[t_j, :, :])
-            # a_hoop_bb = a_hoop_bb.reshape((-1, 4))
-
-
             np.save(motion_fpath, motion)
+            np.save(shot_traj_fpath, shot_traj)
+
         l_hoops_info_str.append(str(a_hoop_bb.tolist()).strip('[]').replace(' ', ''))
+
     print(f'====== ALL DONE =====')
 
     df = pd.DataFrame({'name': motions,

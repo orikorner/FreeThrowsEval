@@ -13,6 +13,11 @@ from scipy.ndimage import gaussian_filter1d
 #               LeftUpLeg, LeftLeg, LeftFoot
 
 
+def calc_polynomial_coeff_by_points_n_deg(x, y, deg=2):
+    assert len(x) == len(y)
+    return np.polyfit(x, y, deg)
+
+
 def trans_motion2d_to_hips_coord_sys(motion2d):
     # subtract centers to local coordinates
     centers = motion2d[8, :, :]

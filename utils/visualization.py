@@ -41,7 +41,7 @@ def matplotlib_imshow(img, one_channel=False):
         plt.imshow(np.transpose(npimg, (1, 2, 0)))
 
 
-def images_to_probs(outputs, images):
+def outputs_to_probs(outputs):
     '''
     Generates predictions and corresponding probabilities from a trained
     network and a list of images
@@ -52,8 +52,8 @@ def images_to_probs(outputs, images):
     return preds, [F.softmax(el, dim=0)[i].item() for i, el in zip(preds, outputs)]
 
 
-def get_predictions(outputs, vid_names, images, labels, w_print=True):
-    preds, probs = images_to_probs(outputs, images)
+def get_predictions(outputs, vid_names, labels, w_print=True):
+    preds, probs = outputs_to_probs(outputs)
     labels = labels.reshape(-1).numpy()
     correct = np.logical_not(np.logical_xor(np.array(preds), labels)).sum()
     num_ones = 0
@@ -69,6 +69,40 @@ def get_predictions(outputs, vid_names, images, labels, w_print=True):
 
         print(f'Accuracy: {correct}/{len(labels)} ({correct / len(labels):.3}) Correct Made Shots: {num_ones}/{correct}')
     return preds, probs, correct
+
+
+def print_predictions_info(outputs, labels, vid_names, labels_info_df):
+    preds, probs = outputs_to_probs(outputs)
+    labels = labels.reshape(-1).numpy()
+    correct = np.logical_not(np.logical_xor(np.array(preds), labels)).sum()
+    num_ones = 0
+    for i in range(len(labels)):
+        if preds[i] == 1 and labels[i] == 1:
+            num_ones += 1
+    print('\n========================================')
+    print(f'Total Items: {len(labels)}')
+    print(f'Correct Predictions: {correct}/{len(labels)} ({correct / len(labels):.3}) Correct Made Shots: {num_ones}/{correct}')
+    print('========================================')
+    print('=========== Correct Misses =============')
+    for i in range(len(labels)):
+        if preds[i] == 0 and labels[i] == 0:
+            shot_frame = int(labels_info_df.loc[labels_info_df['video_name'] == int(vid_names[i])]['shot_frame'].item())
+            print(f'Name: {vid_names[i]}, Conf: {probs[i]:.3}, Shot Index: {shot_frame}')
+    print('=========== Correct Mades =============')
+    for i in range(len(labels)):
+        if preds[i] == 1 and labels[i] == 1:
+            shot_frame = int(labels_info_df.loc[labels_info_df['video_name'] == int(vid_names[i])]['shot_frame'].item())
+            print(f'Name: {vid_names[i]}, Conf: {probs[i]:.3}, Shot Index: {shot_frame}')
+    print('=========== Fail Misses =============')
+    for i in range(len(labels)):
+        if preds[i] == 1 and labels[i] == 0:
+            shot_frame = int(labels_info_df.loc[labels_info_df['video_name'] == int(vid_names[i])]['shot_frame'].item())
+            print(f'Name: {vid_names[i]}, Conf: {probs[i]:.3}, Shot Index: {shot_frame}')
+    print('=========== Fail Mades =============')
+    for i in range(len(labels)):
+        if preds[i] == 0 and labels[i] == 1:
+            shot_frame = int(labels_info_df.loc[labels_info_df['video_name'] == int(vid_names[i])]['shot_frame'].item())
+            print(f'Name: {vid_names[i]}, Conf: {probs[i]:.3}, Shot Index: {shot_frame}')
 
 
 def plot_classes_preds(outputs, vid_names, images, labels):
@@ -288,7 +322,7 @@ def get_hoop_plot_info(hoop_bb):
     return int(hoop_bb[0]), int(bball_center[1]), int(hoop_bb[2]), int(bball_center[1])
 
 
-def motion2video(motion, h, w, save_path, colors, shot_rel_frame=-1, shot_traj=None, hoop_bbs=None, transparency=False, motion_tgt=None, fps=25, save_frame=False):
+def motion2video(motion, h, w, save_path, colors, shot_rel_frame=None, shot_traj=None, hoop_bbs=None, transparency=False, motion_tgt=None, fps=25, save_frame=False):
     shot_released = False
     nr_joints = motion.shape[0]
     videowriter = imageio.get_writer(save_path, fps=fps)
@@ -298,14 +332,14 @@ def motion2video(motion, h, w, save_path, colors, shot_rel_frame=-1, shot_traj=N
         frames_dir = save_path[:-4] + '-frames'
         utils.ensure_dir(frames_dir)
     for i in tqdm(range(vlen)):
-        if i >= shot_rel_frame:
+        if shot_rel_frame is not None and i >= shot_rel_frame:
             shot_released = True
         [img, img_cropped] = joints2image(motion[:, :, i], colors, transparency, H=h, W=w, nr_joints=nr_joints, shot_released=shot_released)
         if shot_released and k < len(shot_traj):
             cv2.circle(img, (int(shot_traj[k][0]), int(shot_traj[k][1])), 5, [255, 0, 0], thickness=4)
             k += 1
         # Draw Hoop
-        if len(hoop_bbs) > i:
+        if hoop_bbs is not None and len(hoop_bbs) > i:
             x1, y1, x2, y2 = get_hoop_plot_info(hoop_bbs[i])
             cv2.line(img, (x1, y1), (x2, y2), (0, 255, 0), thickness=5)
         if motion_tgt is not None:
@@ -327,6 +361,9 @@ def extract_hoop_info_into_np(objs_info_fpath):
     obj_id x1 y1 x2 y2,obj_id x1 y1 x2 y2,
     we return 2 numpy arrays (ball and hoop) with the coordinates separated by a comma
     """
+    if not osp.exists(objs_info_fpath):
+        return None
+
     hoop_bb_info = []
     with open(objs_info_fpath, 'r') as objs_info_fp:
         for i, line in enumerate(objs_info_fp):
@@ -377,10 +414,24 @@ if __name__ == '__main__':
 
     for i, curr_clip_name in enumerate(clips):
         curr_motion_name = curr_clip_name.split(".")[0]
-        # if int(curr_motion_name) != 109:
+
+        # if int(curr_motion_name) not in [40,110,690,710,714,823,838,878,971,1021]:
+        #     # wrong ft shooter
+        #     continue
+        # if int(curr_motion_name) not in [51, 92, 237, 239, 266, 269, 638, 704, 734, 750, 760, 762, 792, 810]:
+        #     # wrong hoop at first frame
         #     continue
         curr_shot_rl_frame = shot_rel_df.loc[shot_rel_df['video_name'] == int(curr_motion_name)]['shot_frame'].item()
         a_hoop_bb = extract_hoop_info_into_np(osp.join(detections_dir, f'{curr_motion_name}.txt'))
+
+        # In case first frame hoop at [0, 0, 0, 0]
+        first_hoop_found_idx = 0
+        if a_hoop_bb[0][0] == 0:
+            for j in range(len(a_hoop_bb)):
+                if a_hoop_bb[j][0] != 0:
+                    first_hoop_found_idx = j
+                    break
+
         curr_motion_name = f'{curr_motion_name}.npy'
 
         curr_out_name = osp.join(args.out_dir, curr_clip_name)
@@ -388,6 +439,12 @@ if __name__ == '__main__':
         shot_traj = np.load(osp.join(shot_traj_dir, curr_motion_name))
 
         motion = np.load(osp.join(motion_dir, curr_motion_name))
+        if a_hoop_bb[first_hoop_found_idx][0] < (1280 - a_hoop_bb[first_hoop_found_idx][0]):
+            # Because Hoop position is not flipped in processed yolo detections dir, so we flip for visualization
+            a_hoop_bb = a_hoop_bb.reshape((-1, 2, 2))
+            for t_j in range(a_hoop_bb.shape[0]):
+                a_hoop_bb[t_j, :, :] = flip_horizontaly(a_hoop_bb[t_j, :, :])
+            a_hoop_bb = a_hoop_bb.reshape((-1, 4))
 
         # if shot_traj[0][0] > shot_traj[-1][0]:
         #     shot_traj = flip_horizontaly(shot_traj)
