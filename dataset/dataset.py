@@ -1,4 +1,4 @@
-from utils.operators import trans_motion2d_to_hips_coord_sys, trans_motion2d_to_hoop_coord_sys, calc_pixels_to_real_units_scaling_factor
+from utils.operators import calc_polynomial_coeff_by_points_n_deg, trans_motion2d_to_hips_coord_sys, trans_motion2d_to_hoop_coord_sys, calc_pixels_to_real_units_scaling_factor
 from .augmentations import NormalizeMotion, Resize, ToTensor, GaussianNoise, RandomZeroMask
 from torch.utils.data import Dataset
 import os
@@ -36,8 +36,8 @@ class BBFTSDataset(Dataset):
             # RandomZeroMask(p=0.03),
             ToTensor()
         ])
-        self.cnt = 0
-        self.all_joints_glob = []
+
+        self.poly_deg = config.poly_deg
 
     def __len__(self):
         return len(os.listdir(self.data_fpath))
@@ -61,32 +61,14 @@ class BBFTSDataset(Dataset):
             # calculate scaling factor (from pixels to real world units, e.g Feet x alpha)
             scale_factor_x, scale_factor_y = calc_pixels_to_real_units_scaling_factor(motion, hoop_bb, alpha=0.4)
             self.scale_factoring_map[vid_name] = {'X': scale_factor_x, 'Y': scale_factor_y}
-            # self.cnt += 1
 
         # Transform motion coordinate system
         motion = trans_motion2d_to_hoop_coord_sys(motion, hoop_bb)
-        # motion = trans_motion2d_to_hips_coord_sys(motion)
         # Convert units
         motion = motion * np.array([self.scale_factoring_map[vid_name]['X'], self.scale_factoring_map[vid_name]['Y']]).reshape((1, 2, 1))
 
-        # motion = (motion - self.mean_pose[:, :, np.newaxis]) / self.std_pose[:, :, np.newaxis]
-
-        # if self.cnt <= 323:
-        #     self.all_joints_glob.append(motion)
         motion = self.transforms(motion)
-        # if self.cnt == 323:
-        #     all_joints_glob_np = np.concatenate(self.all_joints_glob, axis=2)
-        #     meanpose = np.mean(all_joints_glob_np, axis=2, dtype=np.float64)
-        #     stdpose = np.std(all_joints_glob_np, axis=2, dtype=np.float64)
-        #     stdpose[np.where(stdpose == 0)] = 1e-9
-        #     print('MeanPose after scaling')
-        #     print(meanpose)
-        #     print()
-        #     print('StdPose after scaling')
-        #     print(stdpose)
-        #     exit()
-        # motion = motion.reshape((30, -1))
-        # motion = torch.Tensor(motion)
+
         shot_trajectory = np.load(osp.join(self.shot_traj_fpath, f'{vid_name}.npy'))
         shot_traj_len = len(shot_trajectory)
         shot_trajectory = shot_trajectory.T[np.newaxis, ...]
@@ -98,7 +80,8 @@ class BBFTSDataset(Dataset):
         # assert shot_trajectory.shape[-1] == 10
         shot_trajectory = shot_trajectory - shot_trajectory[:, 0].reshape(2, -1)
         # shot_trajectory shape is (2, T)
-        shot_trajectory = np.polyfit(shot_trajectory[0, :], shot_trajectory[1, :], 3)
+        shot_trajectory = calc_polynomial_coeff_by_points_n_deg(shot_trajectory[0, :], shot_trajectory[1, :], deg=self.poly_deg)
+        # shot_trajectory = np.polyfit(shot_trajectory[0, :], shot_trajectory[1, :], 3)
         shot_trajectory = torch.Tensor(shot_trajectory)
         # motion = trans_motion2d_to_hips_coord_sys(motion)
         # Convert units
@@ -155,10 +138,11 @@ class BBFTSDataset(Dataset):
             scale_factor_x, scale_factor_y = calc_pixels_to_real_units_scaling_factor(motion2d, hoop_bb, alpha=0.4)
             self.scale_factoring_map[curr_vid_name] = {'X': scale_factor_x, 'Y': scale_factor_y}
             # Transform motion coordinate system
-            motion2d = trans_motion2d_to_hoop_coord_sys(motion2d, hoop_bb)
+            motion2d_v2 = trans_motion2d_to_hoop_coord_sys(motion2d, hoop_bb)
+            # motion2d = trans_motion2d_to_hips_coord_sys(motion2d)
             # Convert units
-            motion2d = motion2d * np.array([scale_factor_x, scale_factor_y]).reshape((1, 2, 1))
-            all_joints.append(motion2d)
+            motion2d_v2 = motion2d_v2 * np.array([scale_factor_x, scale_factor_y]).reshape((1, 2, 1))
+            all_joints.append(motion2d_v2)
 
         all_joints = np.concatenate(all_joints, axis=2)
         meanpose = np.mean(all_joints, axis=2)

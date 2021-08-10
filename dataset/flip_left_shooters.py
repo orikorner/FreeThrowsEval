@@ -63,8 +63,16 @@ def find_basket_and_save(data_dir, clip_name):
     return np.array(l_hoop_bb[good_idx])
 
 
-def flip_horizontaly(in_array, h_dim=1280):
-    "305 153 359 168 - > 974,154,921,169"
+def hflip_hoop(in_array, h_dim=1280):
+    """[[305, 154], [359, 169]] -> [[975, 154], [921, 169]]"""
+    x1 = in_array[0]
+    x2 = in_array[2]
+    in_array[0] = h_dim - x2
+    in_array[2] = h_dim - x1
+    return in_array
+
+
+def hflip_2d(in_array, h_dim=1280):
     for i in range(len(in_array)):
         in_array[i][0] = h_dim - in_array[i][0]
 
@@ -97,14 +105,12 @@ if __name__ == '__main__':
 
         if shot_traj[0][0] > shot_traj[-1][0]:
             print(f'====== {i}. Flipping: {curr_motion_name} =====')
-            shot_traj = flip_horizontaly(shot_traj)
+            shot_traj = hflip_2d(shot_traj)
 
             for t_i in range(motion.shape[2]):
-                motion[:, :, t_i] = flip_horizontaly(motion[:, :, t_i])
+                motion[:, :, t_i] = hflip_2d(motion[:, :, t_i])
 
-            a_hoop_bb = a_hoop_bb.reshape((2, 2))
-            a_hoop_bb = flip_horizontaly(a_hoop_bb)
-            a_hoop_bb = a_hoop_bb.reshape((4))
+            a_hoop_bb = hflip_hoop(a_hoop_bb)
 
             np.save(motion_fpath, motion)
             np.save(shot_traj_fpath, shot_traj)

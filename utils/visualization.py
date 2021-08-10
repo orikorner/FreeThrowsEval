@@ -386,11 +386,17 @@ def extract_hoop_info_into_np(objs_info_fpath):
     return np.array(hoop_bb_info)
 
 
-def flip_horizontaly(in_array):
-    for i in range(len(in_array)):
-        in_array[i][0] = 1280 - in_array[i][0]
+# def flip_horizontaly(in_array):
+#     for i in range(len(in_array)):
+#         in_array[i][0] = 1280 - in_array[i][0]
+#     return in_array
+def hflip_hoop(in_array, h_dim=1280):
+    """[[305, 154], [359, 169]] -> [[975, 154], [921, 169]]"""
+    x1 = in_array[0]
+    x2 = in_array[2]
+    in_array[0] = h_dim - x2
+    in_array[2] = h_dim - x1
     return in_array
-
 
 if __name__ == '__main__':
     args = parse_args()
@@ -414,7 +420,8 @@ if __name__ == '__main__':
 
     for i, curr_clip_name in enumerate(clips):
         curr_motion_name = curr_clip_name.split(".")[0]
-
+        # if int(curr_motion_name) != 965:
+        #     continue
         # if int(curr_motion_name) not in [40,110,690,710,714,823,838,878,971,1021]:
         #     # wrong ft shooter
         #     continue
@@ -441,21 +448,10 @@ if __name__ == '__main__':
         motion = np.load(osp.join(motion_dir, curr_motion_name))
         if a_hoop_bb[first_hoop_found_idx][0] < (1280 - a_hoop_bb[first_hoop_found_idx][0]):
             # Because Hoop position is not flipped in processed yolo detections dir, so we flip for visualization
-            a_hoop_bb = a_hoop_bb.reshape((-1, 2, 2))
+            # a_hoop_bb = a_hoop_bb.reshape((-1, 2, 2))
             for t_j in range(a_hoop_bb.shape[0]):
-                a_hoop_bb[t_j, :, :] = flip_horizontaly(a_hoop_bb[t_j, :, :])
-            a_hoop_bb = a_hoop_bb.reshape((-1, 4))
-
-        # if shot_traj[0][0] > shot_traj[-1][0]:
-        #     shot_traj = flip_horizontaly(shot_traj)
-        #
-        #     for t_i in range(motion.shape[2]):
-        #         motion[:, :, t_i] = flip_horizontaly(motion[:, :, t_i])
-        #
-        #     a_hoop_bb = a_hoop_bb.reshape((-1, 2, 2))
-        #     for t_j in range(a_hoop_bb.shape[0]):
-        #         a_hoop_bb[t_j, :, :] = flip_horizontaly(a_hoop_bb[t_j, :, :])
-        #     a_hoop_bb = a_hoop_bb.reshape((-1, 4))
+                a_hoop_bb[t_j, :] = hflip_hoop(a_hoop_bb[t_j, :])
+            # a_hoop_bb = a_hoop_bb.reshape((-1, 4))
 
         capture = cv2.VideoCapture(osp.join(clips_dir, curr_clip_name))
         width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))

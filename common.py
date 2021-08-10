@@ -56,7 +56,9 @@ class Config:
     pre_release_n_frames = 35
     post_release_n_frames = 10
 
-    nr_epochs = 150
+    poly_deg = 2
+
+    nr_epochs = 250
     # batch_size = 24
     num_workers = 0  # TODO
     lr = 1e-3
@@ -75,6 +77,7 @@ class Config:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_ids)
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.in_pretrain = args.pretrain if hasattr(args, 'pretrain') else False
+        self.poly_deg = args.poly_deg if hasattr(args, 'poly_deg') else 2
 
         if not self.in_pretrain:
             self.mot_en_channels = [self.len_joints + 2, 64, 96, 128]

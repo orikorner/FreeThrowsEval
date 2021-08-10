@@ -45,6 +45,9 @@ def trans_motion2d_to_hoop_coord_sys(motion, hoop_pos):
 def calc_pixels_to_real_units_scaling_factor(motion, hoop_pos, alpha=0.4):
     real_hoop_to_floor_dist = 10.0 * alpha
     real_backboard_to_ft_line_dist = 15.0 * alpha
+
+    # We assume Hoop is on Right side of the frame (Even if motion was flipped !)
+    assert int(hoop_pos[2]) > int(hoop_pos[0])
     hoop_bb_x = int(hoop_pos[2])
     hoop_bb_y = (int(hoop_pos[1]) + int(hoop_pos[3])) // 2
     person_y = -1

@@ -149,7 +149,7 @@ video_name,label,phase,shot_frame
 166,0,train,17.0
 168,1,train,37.0
 169,1,train,18.0
-170,1,train,51.0
+170,1,train,45.0
 171,1,train,43.0
 172,1,train,12.0
 173,0,train,41.0
@@ -448,7 +448,7 @@ video_name,label,phase,shot_frame
 486,1,test,61.0
 487,0,test,65.0
 488,1,test,33.0
-489,0,test,47.0
+489,0,test,41.0
 490,1,None,
 491,1,test,25.0
 492,1,test,40.0
@@ -565,7 +565,7 @@ video_name,label,phase,shot_frame
 610,1,train,13.0
 611,0,train,25.0
 612,1,train,28.0
-613,0,train,17.0
+613,0,train,10.0
 614,1,train,18.0
 615,1,train,25.0
 616,0,train,20.0
@@ -585,7 +585,7 @@ video_name,label,phase,shot_frame
 631,1,train,20.0
 632,1,train,23.0
 633,1,train,50.0
-634,0,train,56.0
+634,0,train,51.0
 635,1,train,32.0
 636,0,train,66.0
 637,0,train,42.0
@@ -704,7 +704,7 @@ video_name,label,phase,shot_frame
 754,1,extras,39.0
 755,0,train,12.0
 756,1,extras,19.0
-757,0,train,25.0
+757,0,train,16.0
 758,1,extras,16.0
 759,1,extras,14.0
 760,1,extras,57.0
