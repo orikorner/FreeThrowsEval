@@ -393,7 +393,8 @@ class FtNet(nn.Module):
 
         own_state = self.state_dict()
         for name, param in state_dict.items():
-            if name not in own_state or own_state[name].shape != param.data.shape:
+            begin_name = name.split('.')[0]
+            if name not in own_state or own_state[name].shape != param.data.shape or begin_name == 'cls_head':
                 print(name)
                 continue
             if isinstance(param, nn.parameter.Parameter):

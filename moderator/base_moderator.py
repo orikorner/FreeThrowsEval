@@ -47,9 +47,9 @@ class Moderator(object):
         torch.save(self.net.cpu().state_dict(), save_path)
         self.net.to(self.device)
 
-    # def pre_train_load_network(self, ckpt_path):
-    #     state_dict = torch.load(ckpt_path)
-    #     self.net.load_state_dict(state_dict)
+    def pre_train_load_network(self, ckpt_path):
+        state_dict = torch.load(ckpt_path)
+        self.net.load_state_dict(state_dict)
 
     def load_network(self, epoch):
         load_path = osp.join(self.model_dir, "model_epoch{}.pth".format(epoch))

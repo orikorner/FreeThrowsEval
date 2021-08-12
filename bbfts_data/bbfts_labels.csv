@@ -11,7 +11,6 @@ video_name,label,phase,shot_frame
 11,0,train,26.0
 12,1,train,13.0
 14,1,train,45.0
-15,1,extras,26.0
 16,1,train,50.0
 17,1,extras,46.0
 18,0,train,21.0
@@ -448,7 +447,7 @@ video_name,label,phase,shot_frame
 486,1,test,61.0
 487,0,test,65.0
 488,1,test,33.0
-489,0,test,41.0
+489,0,test,48.0
 490,1,None,
 491,1,test,25.0
 492,1,test,40.0

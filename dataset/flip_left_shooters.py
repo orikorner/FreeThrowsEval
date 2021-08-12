@@ -92,7 +92,7 @@ if __name__ == '__main__':
         # if curr_motion_name in ['255.npy', '293.npy', '299.npy', '31.npy', '313.npy', '314.npy', '334.npy']:
         #     l_hoops_info_str.append('0,0,0,0')
         #     continue
-        # if curr_motion_name not in ['40.npy', '110.npy', '690.npy', '710.npy', '714.npy', '823.npy', '838.npy', '878.npy', '971.npy', '1021.npy']:
+        # if curr_motion_name not in ['489.npy']:
         #     continue
 
         a_hoop_bb = find_basket_and_save(args.data_dir, osp.splitext(curr_motion_name)[0])
@@ -110,7 +110,7 @@ if __name__ == '__main__':
             for t_i in range(motion.shape[2]):
                 motion[:, :, t_i] = hflip_2d(motion[:, :, t_i])
 
-            a_hoop_bb = hflip_hoop(a_hoop_bb)
+            a_hoop_bb = hflip_hoop(a_hoop_bb.copy())
 
             np.save(motion_fpath, motion)
             np.save(shot_traj_fpath, shot_traj)

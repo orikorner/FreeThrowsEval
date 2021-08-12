@@ -10,7 +10,7 @@ class Config:
     name = None
     device = None
     dbg_mode = False
-    in_pretrain = False
+    objective_mode = None
 
     # dataset paths
     data_dir = './bbfts_data'
@@ -64,6 +64,7 @@ class Config:
     lr = 1e-3
     train_set_len = 323
     val_set_len = 50
+    extras_set_len = 528
     save_frequency = 20
     # val_frequency = 14  # 10
 
@@ -76,10 +77,11 @@ class Config:
         utils.ensure_dirs([self.log_dir, self.model_dir])
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_ids)
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.in_pretrain = args.pretrain if hasattr(args, 'pretrain') else False
+        self.objective_mode = args.obj_mode if hasattr(args, 'obj_mode') else 'cls'
         self.poly_deg = args.poly_deg if hasattr(args, 'poly_deg') else 2
+        self.nr_epochs = args.n_epochs if hasattr(args, 'n_epochs') else 250
 
-        if not self.in_pretrain:
+        if self.objective_mode == 'cls':
             self.mot_en_channels = [self.len_joints + 2, 64, 96, 128]
             self.body_en_channels = [self.len_joints + 2, 32, 48, 64]
             self.cls_head_dims = [768, 192, 48, 2]
@@ -88,13 +90,15 @@ class Config:
 
             self.meanpose_path = './bbfts_data/meanpose.npy'
             self.stdpose_path = './bbfts_data/stdpose.npy'
-        else:
+        elif self.objective_mode == 'trj':
             self.mot_en_channels = [self.len_joints + 2, 64, 96, 128]
             self.body_en_channels = [self.len_joints + 2, 32, 48, 64]
-            self.cls_head_dims = [768, 192, 48, 4]
+            self.cls_head_dims = [768, 192, 48, self.poly_deg + 1]
 
             self.meanpose_path = './bbfts_data/extras/meanpose.npy'
             self.stdpose_path = './bbfts_data/extras/stdpose.npy'
+        else:
+            raise ValueError('Bad objective mode, must be trj (trajectory) or cls (classification)')
 
 
 config = Config()

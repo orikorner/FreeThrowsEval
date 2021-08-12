@@ -32,7 +32,7 @@ def parse_args():
     parser.add_argument('--data-dir', type=str, help='fpath to dataset dir')
     parser.add_argument('--out-file', type=str, default='bball_trajectory.csv', help='out .csv file')
     parser.add_argument('--checkpoint', type=str, help='fpath to mask rcnn model weights')
-    parser.add_argument('--num-samples', type=int, default=5, help='Num of frames to sample for ft shooter detection')
+    parser.add_argument('--num-samples', type=int, default=7, help='Num of frames to sample for ft shooter detection')
     parser.add_argument('--w-smooth', action='store_true', default=False, help='whether to smooth motion')
 
     args = parser.parse_args()
@@ -205,6 +205,9 @@ def locate_ft_shooter_in_clip(model, clip_fpath, num_samples, num_frames):
     #     print(predictions[k][0]['scores'])
     # for k in range(len(predictions)):
     #     print(predictions[k][0]['boxes'])
+    # print(predictions[0][0]['boxes'][0].cpu().numpy())
+    # print(predictions[3][0]['boxes'][1].cpu().numpy())
+    # print(predictions[1][0]['boxes'][2].cpu().numpy())
     # exit()
 
     w, h = disp_imgs[0].size
@@ -528,7 +531,7 @@ def json2npy(data_dir, state_dict, num_samples, smooth):
     for i, clip_name in enumerate(vids_kp_dirs):
         print(f'====== {i} - {clip_name} =====')
         # First we need to find the ft shooter in clip (bounding box)
-        # if int(clip_name) not in [40,110,690,710,714,823,838,878,971,1021]:
+        # if int(clip_name) not in [489]:
         #     continue
         curr_clip_fpath = osp.join(clips_dir_fpath, clip_name)
         curr_clip_fpath = f'{curr_clip_fpath}.mp4'

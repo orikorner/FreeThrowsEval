@@ -1,9 +1,10 @@
 from .utils import ensure_dir
+# from .utils import hex2rgb
 # from .operators import
-# from .visualization import
+from .visualization import hex2rgb
 
 __all__ = [
-    'ensure_dir'
+    'ensure_dir', 'hex2rgb'
 ]
 
 # __all__ = [

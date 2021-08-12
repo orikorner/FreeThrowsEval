@@ -57,13 +57,13 @@ class BBFTSDataset(Dataset):
         motion = motion[:, :, shot_frame - self.pre_rel_n_frames:shot_frame + self.post_rel_n_frames]
 
         hoop_bb = self.hoops_df.loc[self.hoops_df['name'] == f'{vid_name}.npy']['hoop'].item().split(',')
-        if vid_name not in self.scale_factoring_map:
-            # calculate scaling factor (from pixels to real world units, e.g Feet x alpha)
-            scale_factor_x, scale_factor_y = calc_pixels_to_real_units_scaling_factor(motion, hoop_bb, alpha=0.4)
-            self.scale_factoring_map[vid_name] = {'X': scale_factor_x, 'Y': scale_factor_y}
+        # if vid_name not in self.scale_factoring_map:
+        # calculate scaling factor (from pixels to real world units, e.g Feet x alpha)
+        scale_factor_x, scale_factor_y = calc_pixels_to_real_units_scaling_factor(motion, hoop_bb, alpha=1.0)
+        self.scale_factoring_map[vid_name] = {'X': scale_factor_x, 'Y': scale_factor_y}
 
         # Transform motion coordinate system
-        motion = trans_motion2d_to_hoop_coord_sys(motion, hoop_bb)
+        motion = trans_motion2d_to_hoop_coord_sys(motion.copy(), hoop_bb)
         # Convert units
         motion = motion * np.array([self.scale_factoring_map[vid_name]['X'], self.scale_factoring_map[vid_name]['Y']]).reshape((1, 2, 1))
 
@@ -71,21 +71,46 @@ class BBFTSDataset(Dataset):
 
         shot_trajectory = np.load(osp.join(self.shot_traj_fpath, f'{vid_name}.npy'))
         shot_traj_len = len(shot_trajectory)
+        # print(shot_trajectory)
+        shot_trajectory[:, 0] = shot_trajectory[:, 0] - shot_trajectory[0][0]
+        shot_trajectory[:, 1] = -1 * (shot_trajectory[:, 1] - shot_trajectory[0][1])
+        # print(shot_trajectory)
+        # exit()
         shot_trajectory = shot_trajectory.T[np.newaxis, ...]
-        shot_trajectory = trans_motion2d_to_hoop_coord_sys(shot_trajectory, hoop_bb)
+        # print(shot_trajectory[0, :, :].T)
+        # print()
+        # shot_trajectory = trans_motion2d_to_hoop_coord_sys(shot_trajectory, hoop_bb)
+
+        # print(shot_trajectory[0, :, :].T)
         shot_trajectory = shot_trajectory * np.array([self.scale_factoring_map[vid_name]['X'], self.scale_factoring_map[vid_name]['Y']]).reshape((1, 2, 1))
         n_ball_samples = min(shot_traj_len, 10)
-        shot_trajectory = shot_trajectory[0, :, ::(shot_traj_len // n_ball_samples)]
-        shot_trajectory = shot_trajectory[:, :10]
+        # print()
+        # print(f'{shot_traj_len} // {n_ball_samples}')
+        # print(shot_trajectory[0, :, :].T)
+        # print()
+        # shot_trajectory = shot_trajectory[0, :, ::(shot_traj_len // n_ball_samples)]
+        shot_trajectory = shot_trajectory[0, :, :]
+        # print(shot_trajectory.T)
+        # shot_trajectory = shot_trajectory[:, :10]
+        # print()
+        # print(shot_trajectory.T)
         # assert shot_trajectory.shape[-1] == 10
-        shot_trajectory = shot_trajectory - shot_trajectory[:, 0].reshape(2, -1)
+        # shot_trajectory = shot_trajectory - shot_trajectory[:, 0].reshape(2, -1)
+        # print()
+        # print(shot_trajectory.T)
+        # exit()
         # shot_trajectory shape is (2, T)
-        shot_trajectory = calc_polynomial_coeff_by_points_n_deg(shot_trajectory[0, :], shot_trajectory[1, :], deg=self.poly_deg)
+        shot_traj_coeffs = calc_polynomial_coeff_by_points_n_deg(shot_trajectory[0, :], shot_trajectory[1, :], deg=self.poly_deg)
         # shot_trajectory = np.polyfit(shot_trajectory[0, :], shot_trajectory[1, :], 3)
-        shot_trajectory = torch.Tensor(shot_trajectory)
+        shot_traj_coeffs = torch.Tensor(shot_traj_coeffs)
+        scale_factors = torch.Tensor(np.array([scale_factor_x, scale_factor_y]))
         # motion = trans_motion2d_to_hips_coord_sys(motion)
         # Convert units
-        sample = {'name': vid_name, 'motion': motion, 'label': label, 'shot_trajectory': shot_trajectory}
+        sample = {'name': vid_name,
+                  'motion': motion,
+                  'label': label,
+                  'shot_traj_coeffs': shot_traj_coeffs,
+                  'scale': scale_factors}
 
         return sample
 
@@ -119,10 +144,12 @@ class BBFTSDataset(Dataset):
         return meanpose, stdpose
 
     def gen_meanpose(self, config):
-        if config.in_pretrain:
+        if config.objective_mode == 'trj':
             all_paths = sorted(glob.glob(osp.join(config.data_dir, 'extras', 'motion/*.npy')))   # paths to all_motion.npy files
-        else:
+        elif config.objective_mode == 'cls':
             all_paths = sorted(glob.glob(osp.join(config.data_dir, 'train', 'motion/*.npy')))   # paths to all_motion.npy files
+        else:
+            raise ValueError('Unknown objective mode!')
 
         all_joints = []
         for path in all_paths:
@@ -135,14 +162,14 @@ class BBFTSDataset(Dataset):
             motion2d = motion2d[:, :, curr_shot_frame - self.pre_rel_n_frames:curr_shot_frame + self.post_rel_n_frames]
             # calculate scaling factor (from pixels to real world units, e.g Feet x alpha)
             hoop_bb = self.hoops_df.loc[self.hoops_df['name'] == f'{curr_vid_name}.npy']['hoop'].item().split(',')
-            scale_factor_x, scale_factor_y = calc_pixels_to_real_units_scaling_factor(motion2d, hoop_bb, alpha=0.4)
+            scale_factor_x, scale_factor_y = calc_pixels_to_real_units_scaling_factor(motion2d, hoop_bb, alpha=1.0)
             self.scale_factoring_map[curr_vid_name] = {'X': scale_factor_x, 'Y': scale_factor_y}
             # Transform motion coordinate system
-            motion2d_v2 = trans_motion2d_to_hoop_coord_sys(motion2d, hoop_bb)
+            motion2d_in_hoop_coords = trans_motion2d_to_hoop_coord_sys(motion2d, hoop_bb)
             # motion2d = trans_motion2d_to_hips_coord_sys(motion2d)
             # Convert units
-            motion2d_v2 = motion2d_v2 * np.array([scale_factor_x, scale_factor_y]).reshape((1, 2, 1))
-            all_joints.append(motion2d_v2)
+            motion2d_in_hoop_coords = motion2d_in_hoop_coords * np.array([scale_factor_x, scale_factor_y]).reshape((1, 2, 1))
+            all_joints.append(motion2d_in_hoop_coords)
 
         all_joints = np.concatenate(all_joints, axis=2)
         meanpose = np.mean(all_joints, axis=2)

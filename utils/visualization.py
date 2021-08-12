@@ -318,8 +318,25 @@ def pose2im(all_peaks, limbSeq, limb_colors, joint_colors, H, W, _circle=True, _
 
 
 def get_hoop_plot_info(hoop_bb):
-    bball_center = np.array([0.5 * (hoop_bb[0] + hoop_bb[2]), 0.5 * (hoop_bb[1] + hoop_bb[3])])
+    bball_center = np.array([0.5 * (float(hoop_bb[0]) + float(hoop_bb[2])), 0.5 * (float(hoop_bb[1]) + float(hoop_bb[3]))])
     return int(hoop_bb[0]), int(bball_center[1]), int(hoop_bb[2]), int(bball_center[1])
+
+
+def make_shot_trajectory_image(shot_pose, h, w, save_path, colors, shot_traj_gt, shot_traj, hoop_bb):
+
+    nr_joints = shot_pose.shape[0]
+
+    [img, img_cropped] = joints2image(shot_pose, colors, transparency=False, H=h, W=w, nr_joints=nr_joints)
+
+    x1, y1, x2, y2 = get_hoop_plot_info(hoop_bb)
+    cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255), thickness=5)
+    for i in range(len(shot_traj)):
+
+        cv2.circle(img, (int(shot_traj[i][0]), int(shot_traj[i][1])), 2, [255, 0, 0], thickness=2)
+        cv2.circle(img, (int(shot_traj_gt[i][0]), int(shot_traj_gt[i][1])), 7, [0, 255, 0], thickness=2)
+
+    save_image(img, save_path)
+
 
 
 def motion2video(motion, h, w, save_path, colors, shot_rel_frame=None, shot_traj=None, hoop_bbs=None, transparency=False, motion_tgt=None, fps=25, save_frame=False):
@@ -386,10 +403,6 @@ def extract_hoop_info_into_np(objs_info_fpath):
     return np.array(hoop_bb_info)
 
 
-# def flip_horizontaly(in_array):
-#     for i in range(len(in_array)):
-#         in_array[i][0] = 1280 - in_array[i][0]
-#     return in_array
 def hflip_hoop(in_array, h_dim=1280):
     """[[305, 154], [359, 169]] -> [[975, 154], [921, 169]]"""
     x1 = in_array[0]
@@ -397,6 +410,7 @@ def hflip_hoop(in_array, h_dim=1280):
     in_array[0] = h_dim - x2
     in_array[2] = h_dim - x1
     return in_array
+
 
 if __name__ == '__main__':
     args = parse_args()
@@ -420,7 +434,7 @@ if __name__ == '__main__':
 
     for i, curr_clip_name in enumerate(clips):
         curr_motion_name = curr_clip_name.split(".")[0]
-        # if int(curr_motion_name) != 965:
+        # if int(curr_motion_name) not in [489]:
         #     continue
         # if int(curr_motion_name) not in [40,110,690,710,714,823,838,878,971,1021]:
         #     # wrong ft shooter
@@ -448,10 +462,8 @@ if __name__ == '__main__':
         motion = np.load(osp.join(motion_dir, curr_motion_name))
         if a_hoop_bb[first_hoop_found_idx][0] < (1280 - a_hoop_bb[first_hoop_found_idx][0]):
             # Because Hoop position is not flipped in processed yolo detections dir, so we flip for visualization
-            # a_hoop_bb = a_hoop_bb.reshape((-1, 2, 2))
             for t_j in range(a_hoop_bb.shape[0]):
                 a_hoop_bb[t_j, :] = hflip_hoop(a_hoop_bb[t_j, :])
-            # a_hoop_bb = a_hoop_bb.reshape((-1, 4))
 
         capture = cv2.VideoCapture(osp.join(clips_dir, curr_clip_name))
         width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))

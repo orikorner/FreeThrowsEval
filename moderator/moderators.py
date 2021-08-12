@@ -42,7 +42,7 @@ class TrajectoryModerator(Moderator):
 
     def forward(self, data):
         inputs = data['motion'].to(self.device)
-        labels = data['shot_trajectory'].to(self.device)
+        labels = data['shot_traj_coeffs'].to(self.device)
         # update loss metric
         losses = {}
 
@@ -94,47 +94,3 @@ class ClassifierModerator(Moderator):
         losses['cross_entropy'] = self.loss(outputs, labels)
 
         return outputs, losses
-
-    # def save_network(self, name=None):
-    #     if name is None:
-    #         save_path = osp.join(self.model_dir, "model_epoch{}.pth".format(self.clock.epoch))
-    #     else:
-    #         save_path = osp.join(self.model_dir, name)
-    #     torch.save(self.net.cpu().state_dict(), save_path)
-    #     self.net.to(self.device)
-    #
-    # # def pre_train_load_network(self, ckpt_path):
-    # #     state_dict = torch.load(ckpt_path)
-    # #     self.net.load_state_dict(state_dict)
-    #
-    # def load_network(self, epoch):
-    #     load_path = osp.join(self.model_dir, "model_epoch{}.pth".format(epoch))
-    #     state_dict = torch.load(load_path)
-    #     self.net.load_state_dict(state_dict)
-    #
-    # def update_network(self, loss_dcit):
-    #     loss = sum(loss_dcit.values())
-    #     self.optimizer.zero_grad()
-    #     loss.backward()
-    #     self.optimizer.step()
-    #
-    # def update_learning_rate(self, metrics):
-    #     self.scheduler.step()
-    #     # self.scheduler.step(metrics)
-    #
-    # def train_func(self, data):
-    #     self.net.train()
-    #
-    #     outputs, losses = self.forward(data)
-    #
-    #     self.update_network(losses)
-    #
-    #     return outputs, losses
-    #
-    # def val_func(self, data):
-    #     self.net.eval()
-    #
-    #     with torch.no_grad():
-    #         outputs, losses = self.forward(data)
-    #
-    #     return outputs, losses
