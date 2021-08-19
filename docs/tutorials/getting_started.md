@@ -22,7 +22,10 @@ FreeThrowsEval
 
 
 2.  Train model, Run:
-python train.py --name <name>
+python train.py --name <name> --n-epochs <num> --obj-mode <cls/trj>
 
 3. (Optional) - View on tensorboard, Run:
 tensorboard --logdir=train_log/<name>/log
+
+4. Test, Run
+python test.py --name <name> --checkpoint train_log/<exp name>/model/model_epoch100.pth

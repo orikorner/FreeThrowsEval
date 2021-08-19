@@ -19,6 +19,7 @@ from dataset import get_dataloader
 from moderator import get_training_moderator
 from utils.visualization import make_shot_trajectory_image
 from utils.operators import calc_polynomial_coeff_by_points_n_deg
+from utils.utils import cycle
 
 
 def parse_args():
@@ -35,7 +36,7 @@ def parse_args():
     parser.add_argument('-g', '--gpu_ids', type=int, default=0, required=False, help="specify gpu ids")
 
     parser.add_argument('--checkpoint', type=str, default=None, help='path to weights')
-    parser.add_argument('--poly-deg', type=int, default=2, help="ball trajectory polynomial degree")
+    # parser.add_argument('--poly-deg', type=int, default=2, help="ball trajectory polynomial degree")
 
     args = parser.parse_args()
     return args
@@ -63,19 +64,19 @@ if __name__ == '__main__':
     net = get_network(config)
     net = net.to(config.device)
     tr_moder = get_training_moderator(config, net, lr=1)
-    tr_moder.pre_train_load_network(args.checkpoint)
+    # tr_moder.pre_train_load_network(args.checkpoint)
 
-    val_loader = get_dataloader('test', config, config.val_set_len, config.num_workers, shuffle=False)
-    dataiter = iter(val_loader)
-    data = next(dataiter)
+    val_loader = get_dataloader('train', config, config.train_set_len, config.num_workers, shuffle=False)
+    val_loader = cycle(val_loader)
+    data = next(val_loader)
 
     outputs, losses = tr_moder.val_func(data)
     outputs = outputs.detach().cpu().numpy()
 
-    for data_i in range(config.val_set_len):
+    for data_i in range(config.train_set_len):
         curr_vid_name = data['name'][data_i].item()
 
-        save_path = osp.join(args.out_dir, f'{curr_vid_name}_deg{args.poly_deg}.png')
+        save_path = osp.join(args.out_dir, f'{curr_vid_name}.png')
         curr_shot_rl_frame = int(shot_rel_df.loc[shot_rel_df['video_name'] == int(curr_vid_name)]['shot_frame'].item())
         curr_motion_name = f'{curr_vid_name}.npy'
         curr_hoop_bb = hoops_df.loc[hoops_df['name'] == curr_motion_name]['hoop'].item().split(',')
@@ -84,36 +85,60 @@ if __name__ == '__main__':
         shot_pose = np.load(osp.join(motion_dir, curr_motion_name))[:, :, curr_shot_rl_frame]
 
         scale_factor_x , scale_factor_y = data['scale'][data_i].numpy()
-        poly_result_shot_traj = []
-        if config.poly_deg == 2:
-            a, b, c = outputs[data_i]
-            for traj_i in range(len(shot_traj)):
-                real_x = shot_traj[traj_i][0]
-                # real_y = shot_traj[traj_i][1]
-                x_in_traj_coords = real_x - shot_traj[0][0]
-                scaled_x_in_traj_coords = x_in_traj_coords * scale_factor_x
-                scaled_y_in_traj_coords = (a * (scaled_x_in_traj_coords ** 2)) + (b * scaled_x_in_traj_coords) + c
-                y_in_traj_coords = scaled_y_in_traj_coords / scale_factor_y
-                predicted_real_y = shot_traj[0][1] - y_in_traj_coords
-                # print([int(real_x), int(predicted_real_y)])
-                poly_result_shot_traj.append([int(real_x), int(predicted_real_y)])
-        elif config.poly_deg == 3:
-            a, b, c, d = outputs[data_i]
-            for traj_i in range(len(shot_traj)):
-                real_x = shot_traj[traj_i][0]
-                # real_y = shot_traj[traj_i][1]
-                x_in_traj_coords = real_x - shot_traj[0][0]
-                scaled_x_in_traj_coords = x_in_traj_coords * scale_factor_x
-                scaled_y_in_traj_coords = (a * (scaled_x_in_traj_coords ** 3)) + (b * (scaled_x_in_traj_coords ** 2)) + (c * scaled_x_in_traj_coords) + d
-                y_in_traj_coords = scaled_y_in_traj_coords / scale_factor_y
-                predicted_real_y = shot_traj[0][1] - y_in_traj_coords
-                # print([int(real_x), int(predicted_real_y)])
-                poly_result_shot_traj.append([int(real_x), int(predicted_real_y)])
-        else:
-            raise ValueError('Polynomial degree of shot trajectory must be 2 or 3')
 
-        make_shot_trajectory_image(shot_pose, h=720, w=1280, save_path=save_path,
-                                   colors=color1, shot_traj_gt=shot_traj, shot_traj=poly_result_shot_traj,
-                                   hoop_bb=curr_hoop_bb)
+        lbl_high_ball_coords = shot_traj[1, :]
+        lbl_last_ball_coords = shot_traj[-1, :]
 
-        print(f'====== Finished Batch {data_i} ======')
+        for i in range(2, len(shot_traj) - 2):
+            if shot_traj[i][1] > lbl_high_ball_coords[1]:
+                lbl_high_ball_coords = shot_traj[i]
+        # trj_labels = torch.Tensor(np.array([high_ball_coords[1], last_ball_coords[1]]))
+        trj_labels = [lbl_high_ball_coords, lbl_last_ball_coords]
+        # predicted_trj = []
+        high_x, high_y = outputs['trj'][data_i]
+        predicted_x, predicted_y = outputs['trj'][data_i]
+        predicted_x_in_pixels_diff = predicted_x * scale_factor_x
+        predicted_y_in_pixels_diff = predicted_y * scale_factor_y
+        predicted_global_x = predicted_x_in_pixels_diff + shot_traj[0][0]
+        predicted_global_y = shot_traj[0][1] - predicted_y_in_pixels_diff
+
+
+        x_in_traj_coords = lbl_high_ball_coords[0] - shot_traj[0][0]
+        scaled_x_in_traj_coords = x_in_traj_coords * scale_factor_x
+
+        # make_shot_trajectory_image(shot_pose, h=720, w=1280, save_path=save_path,
+        #                            colors=color1, shot_traj_gt=trj_labels, shot_traj=predicted_trj,
+        #                            hoop_bb=curr_hoop_bb)
+        # poly_result_shot_traj = []
+        # if config.poly_deg == 2:
+        #     a, b, c = outputs[data_i]
+        #     for traj_i in range(len(shot_traj)):
+        #         real_x = shot_traj[traj_i][0]
+        #         # real_y = shot_traj[traj_i][1]
+        #         x_in_traj_coords = real_x - shot_traj[0][0]
+        #         scaled_x_in_traj_coords = x_in_traj_coords * scale_factor_x
+        #         scaled_y_in_traj_coords = (a * (scaled_x_in_traj_coords ** 2)) + (b * scaled_x_in_traj_coords) + c
+        #         y_in_traj_coords = scaled_y_in_traj_coords / scale_factor_y
+        #         predicted_real_y = shot_traj[0][1] - y_in_traj_coords
+        #         # print([int(real_x), int(predicted_real_y)])
+        #         poly_result_shot_traj.append([int(real_x), int(predicted_real_y)])
+        # elif config.poly_deg == 3:
+        #     a, b, c, d = outputs[data_i]
+        #     for traj_i in range(len(shot_traj)):
+        #         real_x = shot_traj[traj_i][0]
+        #         # real_y = shot_traj[traj_i][1]
+        #         x_in_traj_coords = real_x - shot_traj[0][0]
+        #         scaled_x_in_traj_coords = x_in_traj_coords * scale_factor_x
+        #         scaled_y_in_traj_coords = (a * (scaled_x_in_traj_coords ** 3)) + (b * (scaled_x_in_traj_coords ** 2)) + (c * scaled_x_in_traj_coords) + d
+        #         y_in_traj_coords = scaled_y_in_traj_coords / scale_factor_y
+        #         predicted_real_y = shot_traj[0][1] - y_in_traj_coords
+        #         # print([int(real_x), int(predicted_real_y)])
+        #         poly_result_shot_traj.append([int(real_x), int(predicted_real_y)])
+        # else:
+        #     raise ValueError('Polynomial degree of shot trajectory must be 2 or 3')
+        # poly_result_shot_traj = None
+        # make_shot_trajectory_image(shot_pose, h=720, w=1280, save_path=save_path,
+        #                            colors=color1, shot_traj_gt=shot_traj, shot_traj=poly_result_shot_traj,
+        #                            hoop_bb=curr_hoop_bb)
+
+        print(f'====== Finished {data_i} ======')

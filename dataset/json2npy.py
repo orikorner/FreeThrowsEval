@@ -531,7 +531,7 @@ def json2npy(data_dir, state_dict, num_samples, smooth):
     for i, clip_name in enumerate(vids_kp_dirs):
         print(f'====== {i} - {clip_name} =====')
         # First we need to find the ft shooter in clip (bounding box)
-        # if int(clip_name) not in [489]:
+        # if int(clip_name) not in [634]:
         #     continue
         curr_clip_fpath = osp.join(clips_dir_fpath, clip_name)
         curr_clip_fpath = f'{curr_clip_fpath}.mp4'

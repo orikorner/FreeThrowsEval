@@ -84,210 +84,112 @@ def main():
     config.initialize(args)
 
     if config.objective_mode == 'trj':
-        curr_batch = 8
-        curr_lr = 0.00001
-
-        net = get_network(config)
-        if args.checkpoint is not None:
-            net.load_state_dict(torch.load(args.checkpoint))
-        net = net.to(config.device)
-
-        tr_moder = get_training_moderator(config, net, curr_lr)
-        clock = tr_moder.clock
-
-        train_tb = CorrectedSummaryWriter(os.path.join(config.log_dir, f'Train_BSize_{curr_batch}_LR_{curr_lr}'))
-        val_tb = CorrectedSummaryWriter(os.path.join(config.log_dir, f'Val_BSize_{curr_batch}_LR_{curr_lr}'))
-
-        train_loader = get_dataloader('extras', config, curr_batch, config.num_workers)
-        val_loader = get_dataloader('test', config, config.val_set_len, config.num_workers, shuffle=False)
-        val_loader = cycle(val_loader)
-
-        # start training
-        for e in range(config.nr_epochs):
-            # begin iteration
-            running_losses = []
-
-            pbar = tqdm(train_loader)
-            for b, data in enumerate(pbar):
-
-                # train step
-                outputs, losses = tr_moder.train_func(data)
-
-                losses_values = {k: v.item() for k, v in losses.items()}
-
-                # record loss to tensorboard - key is loss type
-                for k, v in losses_values.items():
-                    running_losses.append(v)
-                    # train_tb.add_scalar(k, v, clock.step)
-
-                pbar.set_description("EPOCH[{}][{}/{}]".format(e, b, len(train_loader)))
-                pbar.set_postfix(OrderedDict({"Loss": sum(losses_values.values())}))
-
-                clock.tick()
-
-            # Getting Validation Loss and Accuracy (over entire validation set)
-            data = next(val_loader)
-            outputs, losses = tr_moder.val_func(data)
-
-            losses_values = {k: v.item() for k, v in losses.items()}
-            val_loss = losses_values['mse']
-
-            train_mean_loss = sum(running_losses) / len(running_losses)
-            val_tb.add_scalars('Losses',
-                               {'Train Loss': train_mean_loss,
-                                'Val Loss': val_loss},
-                               global_step=e)
-            print(f'{train_mean_loss} - {val_loss}')
-
-            train_tb.add_scalar('learning_rate', tr_moder.optimizer.param_groups[-1]['lr'], clock.epoch)
-            tr_moder.update_learning_rate(e)
-
-            if clock.epoch % config.save_frequency == 0:
-                tr_moder.save_network()
-            tr_moder.save_network('latest.pth.tar')
-            clock.tock()
-
-        train_tb.flush()
-        val_tb.flush()
-        train_tb.close()
-        val_tb.close()
-    elif args.w_extras:
-        label_img = None
-        once = True
         batches = [16]
         lr_list = [0.0001]
-        classes = ['X', 'V']
+        # lr_list = [0.001, 0.0001, 0.00001]
+        trj_weights = [0.5]
+        # trj_weights = [0.8, 0.6, 0.4, 0.2]
+        once = True
         for curr_batch in batches:
             for curr_lr in lr_list:
-                print(f'==================== {curr_batch} - {curr_lr} ===============================')
+                for curr_trj_weight in trj_weights:
+                    print(f'==================== {curr_batch} - {curr_lr} ===============================')
 
-                net = get_network(config)
-                if args.checkpoint is not None:
-                    net.load_my_state_dict(torch.load(args.checkpoint))
-                net = net.to(config.device)
-                # create tensorboard writer
-                train_tb = CorrectedSummaryWriter(os.path.join(config.log_dir, f'Train_BSize_{curr_batch}_LR_{curr_lr}'))
-                val_tb = CorrectedSummaryWriter(os.path.join(config.log_dir, f'Val_BSize_{curr_batch}_LR_{curr_lr}'))
+                    net = get_network(config)
+                    if args.checkpoint is not None:
+                        net.load_state_dict(torch.load(args.checkpoint))
+                    net = net.to(config.device)
 
-                # create dataloader
-                train_loader_pos = get_dataloader('train_pos', config, curr_batch, config.num_workers)
-                train_loader_neg = get_dataloader('train_neg', config, curr_batch, config.num_workers)
-                train_loader_full = get_dataloader('train_all', config, config.train_set_len, config.num_workers, shuffle=False)
+                    tr_moder = get_training_moderator(config, net, curr_lr, curr_trj_weight)
+                    clock = tr_moder.clock
 
-                val_loader = get_dataloader('test', config, config.val_set_len, config.num_workers, shuffle=False)
-                val_loader = cycle(val_loader)
+                    train_tb = CorrectedSummaryWriter(os.path.join(config.log_dir, f'Train_BS_{curr_batch}_LR_{curr_lr}_TRJW_{curr_trj_weight}'))
+                    val_tb = CorrectedSummaryWriter(os.path.join(config.log_dir, f'Val_BSize_{curr_batch}_LR_{curr_lr}_TRJW_{curr_trj_weight}'))
 
-                # create training agent
-                tr_moder = get_training_moderator(config, net, curr_lr)
-                clock = tr_moder.clock
+                    train_loader = get_dataloader('train', config, curr_batch, config.num_workers)
+                    val_loader = get_dataloader('test', config, config.val_set_len, config.num_workers, shuffle=False)
+                    val_loader = cycle(val_loader)
+                    train_loader_full = get_dataloader('train_full', config, config.train_set_len, config.num_workers, shuffle=False)
+                    train_loader_full = cycle(train_loader_full)
+                    # start training
+                    for e in range(config.nr_epochs):
+                        # begin iteration
+                        # running_losses = []
+                        pbar = tqdm(train_loader)
+                        for b, data in enumerate(pbar):
 
-                # start training
-                for e in range(config.nr_epochs):
-                    # begin iteration
-                    running_losses = []
-                    pbar = tqdm(train_loader_pos)
-                    for b, data in enumerate(pbar):
+                            # if once:
+                                # train_tb.add_graph(net, data['motion'].to(config.device))
+                                # train_tb.add_graph(net, torch.ones((1, 30, 45)).to(config.device))
+                                # once = False
+                            # train step
+                            outputs, losses = tr_moder.train_func(data)
 
-                        # if once:
-                            # train_tb.add_graph(net, data['motion'].to(config.device))
-                            # train_tb.add_graph(net, torch.ones((1, 30, 45)).to(config.device))
-                            # once = False
+                            losses_values = {k: v.item() for k, v in losses.items()}
+                            # record loss to tensorboard - key is loss type
+                            for k, v in losses_values.items():
+                                # running_losses.append(v)
+                                train_tb.add_scalar(k, v, clock.step)
 
-                        activation = {}
+                            pbar.set_description("EPOCH[{}][{}/{}]".format(e, b + 1, len(train_loader)))
+                            # pbar.set_postfix({'cls': losses_values['cls'], 'trj': losses_values['trj']})
+                            pbar.set_postfix(OrderedDict({"Loss": sum(losses_values.values())}))
 
-                        def get_activation(name):
-                            def hook(model, input, output):
-                                activation[name] = output.detach().cpu().numpy()
+                            clock.tick()
 
-                            return hook
-
-                        if args.tsb_emb:
-                            net.mot_encoder.register_forward_hook(get_activation('mot_encoder'))
-                            net.static_encoder.register_forward_hook(get_activation('static_encoder'))
-
-                        # train step
-                        outputs, losses = tr_moder.train_func(data)
+                        # Getting Validation Loss and Accuracy (over entire validation set)
+                        data = next(val_loader)
+                        outputs, losses = tr_moder.val_func(data)
 
                         losses_values = {k: v.item() for k, v in losses.items()}
-
-                        # record loss to tensorboard - key is loss type
-                        for k, v in losses_values.items():
+                        # for k, v in losses_values.items():
                             # running_losses.append(v)
-                            train_tb.add_scalar(k, v, clock.step)
+                            # train_tb.add_scalar(k, v, clock.step)
 
-                        # labels = data['label']
-                        # predictions, _, correct = get_predictions(outputs, data['name'], labels, w_print=False)
+                        val_cls_loss = losses_values['cls']
+                        val_trj_loss = losses_values['trj']
+                        labels = data['cls_labels']
+                        w_print = True if (e == config.nr_epochs - 1) else False
+                        predictions, _, correct = get_predictions(outputs['cls'], data['name'], labels, w_print=True)
+                        val_acc = correct / len(labels)
 
-                        pbar.set_description("EPOCH[{}][{}/{}]".format(e, b, len(train_loader_pos)))
-                        pbar.set_postfix(OrderedDict({"Loss": sum(losses_values.values())}))
+                        # Getting Train Loss and Accuracy (over entire training set)
+                        data = next(train_loader_full)
+                        outputs, losses = tr_moder.val_func(data)
 
-                        if (clock.step + 1) % ((324 // curr_batch) + 1) == 0: #config.val_frequency == 0:
-                            # Getting Validation Loss and Accuracy (over entire validation set)
-                            data = next(val_loader)
-                            outputs, losses = tr_moder.val_func(data)
+                        losses_values = {k: v.item() for k, v in losses.items()}
+                        train_cls_loss = losses_values['cls']
+                        train_trj_loss = losses_values['trj']
 
-                            losses_values = {k: v.item() for k, v in losses.items()}
-                            val_loss = losses_values['cross_entropy']
+                        labels = data['cls_labels']
+                        predictions, _, correct = get_predictions(outputs['cls'], data['name'], labels, w_print=False)
+                        train_acc = correct / len(labels)
 
-                            labels = data['label']
-                            w_print = True if (e == config.nr_epochs - 1) else False
-                            predictions, _, correct = get_predictions(outputs, data['name'], labels, w_print=True)
-                            val_acc = correct / len(labels)
+                        val_tb.add_scalars('Accuracies',
+                                           {'Train Acc': train_acc,
+                                            'Val Acc': val_acc},
+                                           global_step=clock.step)
+                        val_tb.add_scalars('Trajectory Loss',
+                                           {'Train Loss': train_trj_loss,
+                                            'Val Loss': val_trj_loss},
+                                           global_step=e)
+                        val_tb.add_scalars('Classification Loss',
+                                           {'Train Loss': train_cls_loss,
+                                            'Val Loss': val_cls_loss},
+                                           global_step=e)
 
-                            # Getting Train Loss and Accuracy (over entire training set)
-                            data = next(iter(train_loader_full))
-                            outputs, losses = tr_moder.val_func(data)
+                        train_tb.add_scalar('learning_rate', tr_moder.optimizer.param_groups[-1]['lr'], clock.epoch)
+                        tr_moder.update_learning_rate(e)
 
-                            losses_values = {k: v.item() for k, v in losses.items()}
-                            train_loss = losses_values['cross_entropy']
+                        if clock.epoch % config.save_frequency == 0:
+                            tr_moder.save_network()
+                        tr_moder.save_network('latest.pth.tar')
+                        clock.tock()
 
-                            labels = data['label']
-                            predictions, _, correct = get_predictions(outputs, data['name'], labels, w_print=False)
-                            train_acc = correct / len(labels)
-
-                            # Feature Map Embeddings visualization
-                            if args.tsb_emb:
-                                if once:
-                                    label_img = get_val_dummy_imgs(config.train_set_len,
-                                                                   100, 100, labels.reshape(-1).numpy())
-                                    once = False
-
-                                motion_enc_out = torch.from_numpy(activation['mot_encoder'])
-                                static_enc_out = torch.from_numpy(activation['static_encoder'])
-
-                                static_enc_out = static_enc_out.repeat(1, 1, motion_enc_out.shape[-1])
-                                feat_map = torch.cat([motion_enc_out, static_enc_out], dim=1)
-                                feat_map = feat_map.reshape(config.train_set_len, 768)
-                                class_labels = [classes[pred] for pred in predictions]
-
-                                train_tb.add_embedding(feat_map, metadata=class_labels,
-                                                       label_img=label_img, global_step=clock.step)
-                            val_tb.add_scalars('Losses',
-                                               {'Train Loss': train_loss,
-                                                'Val Loss': val_loss},
-                                               global_step=clock.step)
-                            val_tb.add_scalars('Accuracies',
-                                               {'Train Acc': train_acc,
-                                                'Val Acc': val_acc},
-                                               global_step=clock.step)
-
-                        clock.tick()
-
-                    train_tb.add_scalar('learning_rate', tr_moder.optimizer.param_groups[-1]['lr'], clock.epoch)
-                    # train_tb.add_scalar('cross_entropy', v, clock.step)
-                    # mean_loss = sum(running_losses) / len(running_losses) # This is for Plateu LR decay
-                    # tr_moder.update_learning_rate(mean_loss)
-                    tr_moder.update_learning_rate(e)
-
-                    if clock.epoch % config.save_frequency == 0:
-                        tr_moder.save_network()
-                    tr_moder.save_network('latest.pth.tar')
-                    clock.tock()
-
-                train_tb.flush()
-                val_tb.flush()
-                train_tb.close()
-                val_tb.close()
+                    train_tb.flush()
+                    val_tb.flush()
+                    train_tb.close()
+                    val_tb.close()
     elif config.objective_mode == 'cls':
         label_img = None
         once = True
@@ -363,9 +265,9 @@ def main():
                             outputs, losses = tr_moder.val_func(data)
 
                             losses_values = {k: v.item() for k, v in losses.items()}
-                            val_loss = losses_values['cross_entropy']
+                            val_loss = losses_values['cls']
 
-                            labels = data['label']
+                            labels = data['cls_labels']
                             w_print = True if (e == config.nr_epochs - 1) else False
                             predictions, _, correct = get_predictions(outputs, data['name'], labels, w_print=True)
                             val_acc = correct / len(labels)
@@ -375,9 +277,9 @@ def main():
                             outputs, losses = tr_moder.val_func(data)
 
                             losses_values = {k: v.item() for k, v in losses.items()}
-                            train_loss = losses_values['cross_entropy']
+                            train_loss = losses_values['cls']
 
-                            labels = data['label']
+                            labels = data['cls_labels']
                             predictions, _, correct = get_predictions(outputs, data['name'], labels, w_print=False)
                             train_acc = correct / len(labels)
 

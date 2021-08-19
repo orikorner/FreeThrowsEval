@@ -278,6 +278,7 @@ class StaticEncoder(nn.Module):
                                               msg='Kernel Size=2, Stride=2, Output Shape Is', dbg_mode=dbg_mode)
 
         self.global_pool = global_pool
+        # self.global_pool = nn.MaxPool1d(kernel_size=5)
         self.compress = compress
 
         self.model = nn.Sequential(*model)
@@ -292,6 +293,7 @@ class StaticEncoder(nn.Module):
         if self.global_pool is not None:
             ks = x.shape[-1]
             x = self.global_pool(x, ks)
+            # x = self.global_pool(x)
             if self.dbg_mode:
                 x = self.glob_pool_print(x)
             if self.compress:
@@ -336,20 +338,21 @@ class FtNet(nn.Module):
     This is the ensembled net object - meaning it combines the different part of the network.
     """
 
-    def __init__(self, mot_en_channels, body_en_channels, cls_head_dims,
+    def __init__(self, mot_en_channels, body_en_channels, cls_head_dims, trj_head_dims,
                  global_pool=None, convpool=None, compress=False, dbg_mode=False):
         super(FtNet, self).__init__()
 
         self.dbg_mode = dbg_mode
 
-        self.data_bn = nn.BatchNorm1d(mot_en_channels[0])
+        # self.data_bn = nn.BatchNorm1d(mot_en_channels[0])
         self.mot_encoder = MotionEncoder(mot_en_channels, kernel_size=5, dbg_mode=dbg_mode)
         self.static_encoder = StaticEncoder(body_en_channels, kernel_size=5, global_pool=global_pool, convpool=convpool,
-                                      compress=compress, dbg_mode=dbg_mode)
+                                            compress=compress, dbg_mode=dbg_mode)
 
-
-        self.cls_head_dims = cls_head_dims
+        # self.cls_head_dims = cls_head_dims
         self.cls_head = Head(dims=cls_head_dims, dbg_mode=dbg_mode)
+        if trj_head_dims is not None:
+            self.trj_head = Head(dims=trj_head_dims, dbg_mode=dbg_mode)
         # for name, param in self.mot_encoder.named_parameters():
         #     if param.requires_grad:
         #         print(name, param.data)
@@ -386,8 +389,11 @@ class FtNet(nn.Module):
         feat_map = torch.cat([mot_out, stat_out], dim=1)
         feat_map = feat_map.view(-1, 768)
 
-        fc_out = self.cls_head(feat_map)
-        return fc_out
+        cls_out = self.cls_head(feat_map)
+        trj_out = None
+        if hasattr(self, 'trj_head'):
+            trj_out = self.trj_head(feat_map)
+        return cls_out, trj_out
 
     def load_my_state_dict(self, state_dict):
 
@@ -402,3 +408,8 @@ class FtNet(nn.Module):
                 param = param.data
 
             own_state[name].copy_(param)
+
+    def print_weight_by_name(self, name):
+        own_state = self.state_dict()
+        # print(own_state)
+        print(own_state[name][0][0])

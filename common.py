@@ -42,6 +42,7 @@ class Config:
     mot_en_channels = None
     body_en_channels = None
     cls_head_dims = None
+    trj_head_dims = None
     # view_en_channels = None
     # de_channels = None
 
@@ -78,25 +79,24 @@ class Config:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_ids)
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.objective_mode = args.obj_mode if hasattr(args, 'obj_mode') else 'cls'
-        self.poly_deg = args.poly_deg if hasattr(args, 'poly_deg') else 2
         self.nr_epochs = args.n_epochs if hasattr(args, 'n_epochs') else 250
+        # self.poly_deg = args.poly_deg if hasattr(args, 'poly_deg') else 2
+        self.meanpose_path = './bbfts_data/meanpose.npy'
+        self.stdpose_path = './bbfts_data/stdpose.npy'
 
         if self.objective_mode == 'cls':
             self.mot_en_channels = [self.len_joints + 2, 64, 96, 128]
             self.body_en_channels = [self.len_joints + 2, 32, 48, 64]
             self.cls_head_dims = [768, 192, 48, 2]
-            # self.de_channels = [self.mot_en_channels[-1] + self.body_en_channels[-1], 128, 64, self.len_joints + 2]
-            # self.view_angles = None
 
-            self.meanpose_path = './bbfts_data/meanpose.npy'
-            self.stdpose_path = './bbfts_data/stdpose.npy'
         elif self.objective_mode == 'trj':
             self.mot_en_channels = [self.len_joints + 2, 64, 96, 128]
             self.body_en_channels = [self.len_joints + 2, 32, 48, 64]
-            self.cls_head_dims = [768, 192, 48, self.poly_deg + 1]
+            self.cls_head_dims = [768, 192, 48, 2]
+            self.trj_head_dims = [768, 192, 48, 4]
 
-            self.meanpose_path = './bbfts_data/extras/meanpose.npy'
-            self.stdpose_path = './bbfts_data/extras/stdpose.npy'
+            # self.meanpose_path = './bbfts_data/extras/meanpose.npy'
+            # self.stdpose_path = './bbfts_data/extras/stdpose.npy'
         else:
             raise ValueError('Bad objective mode, must be trj (trajectory) or cls (classification)')
 

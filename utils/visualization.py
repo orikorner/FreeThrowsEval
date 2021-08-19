@@ -13,6 +13,9 @@ import os
 import os.path as osp
 import pandas as pd
 
+CLIP_WIDTH = 1280
+CLIP_HEIGHT = 720
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -24,7 +27,7 @@ def parse_args():
     parser.add_argument('--detections-dir', type=str, default='processed_yolo_detections', help='name of ball and hoop locations processed dir')
     parser.add_argument('--shot-traj-dir', type=str, default='shot_trajectories', help='name of shot trajectory dir')
     parser.add_argument('--labels-info', type=str, default='bbfts_data/bbfts_labels.csv', help='full path to labels file')
-
+    parser.add_argument('--mode', type=str, default='video', help='either video or as images')
 
     args = parser.parse_args()
     return args
@@ -322,7 +325,7 @@ def get_hoop_plot_info(hoop_bb):
     return int(hoop_bb[0]), int(bball_center[1]), int(hoop_bb[2]), int(bball_center[1])
 
 
-def make_shot_trajectory_image(shot_pose, h, w, save_path, colors, shot_traj_gt, shot_traj, hoop_bb):
+def make_shot_trajectory_image(shot_pose, h, w, save_path, colors, hoop_bb, shot_traj_gt, shot_traj):
 
     nr_joints = shot_pose.shape[0]
 
@@ -330,13 +333,13 @@ def make_shot_trajectory_image(shot_pose, h, w, save_path, colors, shot_traj_gt,
 
     x1, y1, x2, y2 = get_hoop_plot_info(hoop_bb)
     cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255), thickness=5)
-    for i in range(len(shot_traj)):
-
-        cv2.circle(img, (int(shot_traj[i][0]), int(shot_traj[i][1])), 2, [255, 0, 0], thickness=2)
-        cv2.circle(img, (int(shot_traj_gt[i][0]), int(shot_traj_gt[i][1])), 7, [0, 255, 0], thickness=2)
+    for i in range(len(shot_traj_gt)):
+        if shot_traj is not None:
+            cv2.circle(img, (int(shot_traj[i][0]), int(shot_traj[i][1])), 2, [255, 0, 0], thickness=2)
+        if shot_traj_gt is not None:
+            cv2.circle(img, (int(shot_traj_gt[i][0]), int(shot_traj_gt[i][1])), 7, [0, 255, 0], thickness=2)
 
     save_image(img, save_path)
-
 
 
 def motion2video(motion, h, w, save_path, colors, shot_rel_frame=None, shot_traj=None, hoop_bbs=None, transparency=False, motion_tgt=None, fps=25, save_frame=False):
@@ -403,7 +406,7 @@ def extract_hoop_info_into_np(objs_info_fpath):
     return np.array(hoop_bb_info)
 
 
-def hflip_hoop(in_array, h_dim=1280):
+def hflip_hoop(in_array, h_dim=CLIP_WIDTH):
     """[[305, 154], [359, 169]] -> [[975, 154], [921, 169]]"""
     x1 = in_array[0]
     x2 = in_array[2]
@@ -414,6 +417,9 @@ def hflip_hoop(in_array, h_dim=1280):
 
 if __name__ == '__main__':
     args = parse_args()
+
+    if args.mode not in ['video', 'image']:
+        raise ValueError('Invalid output mode, must be video or image !')
 
     shot_rel_df = pd.read_csv(args.labels_info, header=0)
 
@@ -427,59 +433,70 @@ if __name__ == '__main__':
 
     assert len(motions) == len(clips)
 
-    color1 = hex2rgb('#a50b69#b73b87#db9dc3')
-    color2 = hex2rgb('#4076e0#40a7e0#40d7e0')
-    color3 = hex2rgb('#ff8b06#ffb431#ffcd9d')
-    colors = [color1, color2, color3]
+    color = hex2rgb('#a50b69#b73b87#db9dc3')
 
-    for i, curr_clip_name in enumerate(clips):
-        curr_motion_name = curr_clip_name.split(".")[0]
-        # if int(curr_motion_name) not in [489]:
-        #     continue
-        # if int(curr_motion_name) not in [40,110,690,710,714,823,838,878,971,1021]:
-        #     # wrong ft shooter
-        #     continue
-        # if int(curr_motion_name) not in [51, 92, 237, 239, 266, 269, 638, 704, 734, 750, 760, 762, 792, 810]:
-        #     # wrong hoop at first frame
-        #     continue
-        curr_shot_rl_frame = shot_rel_df.loc[shot_rel_df['video_name'] == int(curr_motion_name)]['shot_frame'].item()
-        a_hoop_bb = extract_hoop_info_into_np(osp.join(detections_dir, f'{curr_motion_name}.txt'))
+    if args.mode == 'video':
+        for i, curr_clip_name in enumerate(clips):
+            curr_motion_name = curr_clip_name.split(".")[0]
+            if int(curr_motion_name) not in [133]:
+                continue
+            # if int(curr_motion_name) not in [40,110,690,710,714,823,838,878,971,1021]:
+            #     # wrong ft shooter
+            #     continue
+            # if int(curr_motion_name) not in [51, 92, 237, 239, 266, 269, 638, 704, 734, 750, 760, 762, 792, 810]:
+            #     # wrong hoop at first frame
+            #     continue
+            curr_shot_rl_frame = shot_rel_df.loc[shot_rel_df['video_name'] == int(curr_motion_name)]['shot_frame'].item()
+            a_hoop_bb = extract_hoop_info_into_np(osp.join(detections_dir, f'{curr_motion_name}.txt'))
 
-        # In case first frame hoop at [0, 0, 0, 0]
-        first_hoop_found_idx = 0
-        if a_hoop_bb[0][0] == 0:
-            for j in range(len(a_hoop_bb)):
-                if a_hoop_bb[j][0] != 0:
-                    first_hoop_found_idx = j
-                    break
+            # In case first frame hoop at [0, 0, 0, 0]
+            first_hoop_found_idx = 0
+            if a_hoop_bb[0][0] == 0:
+                for j in range(len(a_hoop_bb)):
+                    if a_hoop_bb[j][0] != 0:
+                        first_hoop_found_idx = j
+                        break
 
-        curr_motion_name = f'{curr_motion_name}.npy'
+            curr_motion_name = f'{curr_motion_name}.npy'
 
-        curr_out_name = osp.join(args.out_dir, curr_clip_name)
+            curr_out_name = osp.join(args.out_dir, curr_clip_name)
 
-        shot_traj = np.load(osp.join(shot_traj_dir, curr_motion_name))
+            shot_traj = np.load(osp.join(shot_traj_dir, curr_motion_name))
 
-        motion = np.load(osp.join(motion_dir, curr_motion_name))
-        if a_hoop_bb[first_hoop_found_idx][0] < (1280 - a_hoop_bb[first_hoop_found_idx][0]):
-            # Because Hoop position is not flipped in processed yolo detections dir, so we flip for visualization
-            for t_j in range(a_hoop_bb.shape[0]):
-                a_hoop_bb[t_j, :] = hflip_hoop(a_hoop_bb[t_j, :])
+            motion = np.load(osp.join(motion_dir, curr_motion_name))
+            if a_hoop_bb[first_hoop_found_idx][0] < (CLIP_WIDTH - a_hoop_bb[first_hoop_found_idx][0]):
+                # Because Hoop position is not flipped in processed yolo detections dir, so we flip for visualization
+                for t_j in range(a_hoop_bb.shape[0]):
+                    a_hoop_bb[t_j, :] = hflip_hoop(a_hoop_bb[t_j, :])
 
-        capture = cv2.VideoCapture(osp.join(clips_dir, curr_clip_name))
-        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        length = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
-        fps = int(capture.get(cv2.CAP_PROP_FPS))
+            capture = cv2.VideoCapture(osp.join(clips_dir, curr_clip_name))
+            width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = int(capture.get(cv2.CAP_PROP_FPS))
 
-        if width > 1000 and height > 700:
-            if fps < 24 or fps > 25:
-                print(f'{curr_clip_name} - FPS: {fps}')
+            if width == CLIP_WIDTH and height == CLIP_HEIGHT and 24 < fps <= 25:
+                motion2video(motion, height, width, curr_out_name, color,
+                             shot_rel_frame=curr_shot_rl_frame, shot_traj=shot_traj, hoop_bbs=a_hoop_bb,
+                             transparency=False, motion_tgt=None, fps=fps, save_frame=False)
+            else:
+                print(f'{curr_clip_name} - W: {width} , H: {height}, FPS: {fps}')
 
-            motion2video(motion, height, width, curr_out_name, color1,
-                         shot_rel_frame=curr_shot_rl_frame, shot_traj=shot_traj, hoop_bbs=a_hoop_bb,
-                         transparency=False, motion_tgt=None, fps=fps, save_frame=False)
-        else:
-            print(f'{curr_clip_name} - W: {width} , H: {height}')
+            capture.release()
+            print(f'====== Finished {i} ======')
+    else:
+        hoops_df = pd.read_csv(osp.join(args.data_dir, 'hoops_info.csv'), header=0)
+        for i, curr_clip_name in enumerate(clips):
+            curr_clip_name = curr_clip_name.split(".")[0]
+            if int(curr_clip_name) not in [133]:
+                continue
+            save_path = osp.join(args.out_dir, f'{curr_clip_name}.png')
+            curr_shot_rl_frame = int(shot_rel_df.loc[shot_rel_df['video_name'] == int(curr_clip_name)]['shot_frame'].item())
 
-        capture.release()
-        print(f'====== Finished {i} ======')
+            curr_motion_name = f'{curr_clip_name}.npy'
+            curr_hoop_bb = hoops_df.loc[hoops_df['name'] == curr_motion_name]['hoop'].item().split(',')
+
+            shot_traj = np.load(osp.join(shot_traj_dir, curr_motion_name))
+            shot_pose = np.load(osp.join(motion_dir, curr_motion_name))[:, :, curr_shot_rl_frame - 3]
+
+            make_shot_trajectory_image(shot_pose, h=CLIP_HEIGHT, w=CLIP_WIDTH, save_path=save_path,
+                                       colors=color, hoop_bb=curr_hoop_bb, shot_traj_gt=shot_traj, shot_traj=None)

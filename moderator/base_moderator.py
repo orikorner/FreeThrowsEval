@@ -16,8 +16,6 @@ class Moderator(object):
         self.clock = TrainClock()
         self.device = config.device
 
-        # set loss function
-        self.loss = None
         # set optimizer
         self.optimizer = None
 
@@ -56,11 +54,13 @@ class Moderator(object):
         state_dict = torch.load(load_path)
         self.net.load_state_dict(state_dict)
 
-    def update_network(self, loss_dcit):
-        loss = sum(loss_dcit.values())
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
+    @abstractmethod
+    def update_network(self, loss_dcit, info=None):
+        pass
+        # loss = sum(loss_dcit.values())
+        # self.optimizer.zero_grad()
+        # loss.backward()
+        # self.optimizer.step()
 
     def update_learning_rate(self, metrics):
         self.scheduler.step()
@@ -71,7 +71,7 @@ class Moderator(object):
 
         outputs, losses = self.forward(data)
 
-        self.update_network(losses)
+        self.update_network(losses, data['objective'][0])
 
         return outputs, losses
 
@@ -80,5 +80,6 @@ class Moderator(object):
 
         with torch.no_grad():
             outputs, losses = self.forward(data)
-
+        # print(outputs[0])
+        # print(outputs['cls'][0])
         return outputs, losses

@@ -92,7 +92,7 @@ if __name__ == '__main__':
         # if curr_motion_name in ['255.npy', '293.npy', '299.npy', '31.npy', '313.npy', '314.npy', '334.npy']:
         #     l_hoops_info_str.append('0,0,0,0')
         #     continue
-        # if curr_motion_name not in ['489.npy']:
+        # if curr_motion_name not in ['133.npy']:
         #     continue
 
         a_hoop_bb = find_basket_and_save(args.data_dir, osp.splitext(curr_motion_name)[0])
