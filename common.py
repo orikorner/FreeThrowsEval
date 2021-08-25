@@ -94,7 +94,9 @@ class Config:
             self.body_en_channels = [self.len_joints + 2, 32, 48, 64]
             self.cls_head_dims = [768, 192, 48, 2]
             self.trj_head_dims = [768, 192, 48, 4]
-
+            # Static
+            # self.cls_head_dims = [320, 192, 48, 2]
+            # self.trj_head_dims = [320, 192, 48, 4]
             # self.meanpose_path = './bbfts_data/extras/meanpose.npy'
             # self.stdpose_path = './bbfts_data/extras/stdpose.npy'
         else:

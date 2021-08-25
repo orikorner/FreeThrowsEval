@@ -9,28 +9,35 @@ class TrajectoryModerator(Moderator):
         super(TrajectoryModerator, self).__init__(config, net)
 
         # set loss function
-        # self.loss = nn.MSELoss()
         self.trj_weight = trj_weight
+        # self.trj_loss = nn.MSELoss()
         self.trj_loss = nn.L1Loss()
-        # self.loss = nn.BCELoss()
-        # self.loss = nn.SmoothL1Loss()
+        # self.trj_loss = nn.BCELoss()
+        # self.trj_loss = nn.SmoothL1Loss()
         self.cls_loss = nn.CrossEntropyLoss()
+        # self.w_high = 0.98
         # set optimizer
         self.optimizer = optim.Adam(self.net.parameters(), lr)
 
         # Scheduler - EXP LR
-        self.scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, 0.99)
+        # self.scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, 0.99)
         # Scheduler - Multi Step
         # milestones = [149]
-        # milestones = [200]
+        # milestones = [40, 60, 80]
+        milestones = [40, 55, 70]
         # milestones = [40, 90]
-        # self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=milestones, gamma=0.1)
+        self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=milestones, gamma=0.1)
         # Scheduler - Cyclic
         # self.optimizer = optim.Adam(self.net.parameters(), 0.00001)
         # self.scheduler = torch.optim.lr_scheduler.CyclicLR(self.optimizer, base_lr=0.00001, max_lr=0.0001, step_size_up=5,
         #                                                    mode="triangular", cycle_momentum=False)
         # Scheduler - Plat
         # self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, patience=5, factor=0.5, verbose=True)
+
+    # def weighted_l1_loss(self, output, target):
+    #     high_pos_loss = (torch.mean(torch.abs(output[:, 0] - target[:, 0])) + torch.mean(torch.abs(output[:, 1] - target[:, 1]))) / 2
+    #     last_pos_loss = (torch.mean(torch.abs(output[:, 2] - target[:, 2])) + torch.mean(torch.abs(output[:, 3] - target[:, 3]))) / 2
+    #     return self.w_high * high_pos_loss + (1 - self.w_high) * last_pos_loss
 
     def forward(self, data):
         inputs = data['motion'].to(self.device)
@@ -41,6 +48,8 @@ class TrajectoryModerator(Moderator):
 
         cls_loss = self.cls_loss(cls_out, cls_labels)
         trj_loss = self.trj_loss(trj_out, trj_labels)
+
+        # trj_loss = self.weighted_l1_loss(trj_out, trj_labels)
 
         outputs = {'cls': cls_out, 'trj': trj_out}
         losses = {'cls': cls_loss, 'trj': trj_loss}
@@ -68,12 +77,11 @@ class ClassifierModerator(Moderator):
         self.optimizer = optim.Adam(self.net.parameters(), lr)
 
         # Scheduler - EXP LR
-        # self.scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, 0.99)
+        self.scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, 0.99)
         # Scheduler - Multi Step
-        # milestones = [149]
-        # milestones = [85, 120]
-        milestones = [40, 90]
-        self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=milestones, gamma=0.1)
+        # milestones = [40, 90]
+        # milestones = [40, 55, 70]
+        # self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=milestones, gamma=0.1)
         # Scheduler - Cyclic
         # self.optimizer = optim.Adam(self.net.parameters(), 0.00001)
         # self.scheduler = torch.optim.lr_scheduler.CyclicLR(self.optimizer, base_lr=0.00001, max_lr=0.0001, step_size_up=5,

@@ -85,15 +85,15 @@ def main():
 
     if config.objective_mode == 'trj':
         batches = [16]
-        lr_list = [0.0001]
+        lr_list = [0.0001, 0.000101]#, 0.000101, 0.0001, 0.0001]
         # lr_list = [0.001, 0.0001, 0.00001]
-        trj_weights = [0.5]
+        trj_weights = [0.3]
         # trj_weights = [0.8, 0.6, 0.4, 0.2]
         once = True
         for curr_batch in batches:
             for curr_lr in lr_list:
                 for curr_trj_weight in trj_weights:
-                    print(f'==================== {curr_batch} - {curr_lr} ===============================')
+                    print(f'==================== {curr_batch} - {curr_lr} - {curr_trj_weight} ===============================')
 
                     net = get_network(config)
                     if args.checkpoint is not None:
@@ -104,7 +104,7 @@ def main():
                     clock = tr_moder.clock
 
                     train_tb = CorrectedSummaryWriter(os.path.join(config.log_dir, f'Train_BS_{curr_batch}_LR_{curr_lr}_TRJW_{curr_trj_weight}'))
-                    val_tb = CorrectedSummaryWriter(os.path.join(config.log_dir, f'Val_BSize_{curr_batch}_LR_{curr_lr}_TRJW_{curr_trj_weight}'))
+                    val_tb = CorrectedSummaryWriter(os.path.join(config.log_dir, f'Val_BS_{curr_batch}_LR_{curr_lr}_TRJW_{curr_trj_weight}'))
 
                     train_loader = get_dataloader('train', config, curr_batch, config.num_workers)
                     val_loader = get_dataloader('test', config, config.val_set_len, config.num_workers, shuffle=False)
@@ -132,8 +132,9 @@ def main():
                                 train_tb.add_scalar(k, v, clock.step)
 
                             pbar.set_description("EPOCH[{}][{}/{}]".format(e, b + 1, len(train_loader)))
-                            # pbar.set_postfix({'cls': losses_values['cls'], 'trj': losses_values['trj']})
-                            pbar.set_postfix(OrderedDict({"Loss": sum(losses_values.values())}))
+                            # pbar.set_postfix(OrderedDict({"Loss": sum(losses_values.values())}))
+                            pbar.set_postfix(OrderedDict({"Trj Loss": losses_values['trj']}))
+                            # pbar.set_postfix(OrderedDict({"Cls Loss": losses_values['cls']}))
 
                             clock.tick()
 
@@ -142,10 +143,6 @@ def main():
                         outputs, losses = tr_moder.val_func(data)
 
                         losses_values = {k: v.item() for k, v in losses.items()}
-                        # for k, v in losses_values.items():
-                            # running_losses.append(v)
-                            # train_tb.add_scalar(k, v, clock.step)
-
                         val_cls_loss = losses_values['cls']
                         val_trj_loss = losses_values['trj']
                         labels = data['cls_labels']
@@ -194,7 +191,7 @@ def main():
         label_img = None
         once = True
         batches = [16]
-        lr_list = [0.0001]
+        lr_list = [0.0001, 0.000101]
         classes = ['X', 'V']
         for curr_batch in batches:
             for curr_lr in lr_list:
@@ -222,6 +219,13 @@ def main():
                 # start training
                 for e in range(config.nr_epochs):
                     # begin iteration
+                    activation = {}
+
+                    def get_activation(name):
+                        def hook(model, input, output):
+                            activation[name] = output.detach().cpu().numpy()
+
+                        return hook
                     running_losses = []
                     pbar = tqdm(train_loader)
                     for b, data in enumerate(pbar):
@@ -230,14 +234,6 @@ def main():
                             # train_tb.add_graph(net, data['motion'].to(config.device))
                             # train_tb.add_graph(net, torch.ones((1, 30, 45)).to(config.device))
                             # once = False
-
-                        activation = {}
-
-                        def get_activation(name):
-                            def hook(model, input, output):
-                                activation[name] = output.detach().cpu().numpy()
-
-                            return hook
 
                         if args.tsb_emb:
                             net.mot_encoder.register_forward_hook(get_activation('mot_encoder'))
@@ -258,58 +254,57 @@ def main():
 
                         pbar.set_description("EPOCH[{}][{}/{}]".format(e, b, len(train_loader)))
                         pbar.set_postfix(OrderedDict({"Loss": sum(losses_values.values())}))
-
-                        if (clock.step + 1) % ((324 // curr_batch) + 1) == 0: #config.val_frequency == 0:
-                            # Getting Validation Loss and Accuracy (over entire validation set)
-                            data = next(val_loader)
-                            outputs, losses = tr_moder.val_func(data)
-
-                            losses_values = {k: v.item() for k, v in losses.items()}
-                            val_loss = losses_values['cls']
-
-                            labels = data['cls_labels']
-                            w_print = True if (e == config.nr_epochs - 1) else False
-                            predictions, _, correct = get_predictions(outputs, data['name'], labels, w_print=True)
-                            val_acc = correct / len(labels)
-
-                            # Getting Train Loss and Accuracy (over entire training set)
-                            data = next(iter(train_loader_full))
-                            outputs, losses = tr_moder.val_func(data)
-
-                            losses_values = {k: v.item() for k, v in losses.items()}
-                            train_loss = losses_values['cls']
-
-                            labels = data['cls_labels']
-                            predictions, _, correct = get_predictions(outputs, data['name'], labels, w_print=False)
-                            train_acc = correct / len(labels)
-
-                            # Feature Map Embeddings visualization
-                            if args.tsb_emb:
-                                if once:
-                                    label_img = get_val_dummy_imgs(config.train_set_len,
-                                                                   100, 100, labels.reshape(-1).numpy())
-                                    once = False
-
-                                motion_enc_out = torch.from_numpy(activation['mot_encoder'])
-                                static_enc_out = torch.from_numpy(activation['static_encoder'])
-
-                                static_enc_out = static_enc_out.repeat(1, 1, motion_enc_out.shape[-1])
-                                feat_map = torch.cat([motion_enc_out, static_enc_out], dim=1)
-                                feat_map = feat_map.reshape(config.train_set_len, 768)
-                                class_labels = [classes[pred] for pred in predictions]
-
-                                train_tb.add_embedding(feat_map, metadata=class_labels,
-                                                       label_img=label_img, global_step=clock.step)
-                            val_tb.add_scalars('Losses',
-                                               {'Train Loss': train_loss,
-                                                'Val Loss': val_loss},
-                                               global_step=clock.step)
-                            val_tb.add_scalars('Accuracies',
-                                               {'Train Acc': train_acc,
-                                                'Val Acc': val_acc},
-                                               global_step=clock.step)
-
                         clock.tick()
+
+                    # if (clock.step + 1) % ((324 // curr_batch) + 1) == 0: #config.val_frequency == 0:
+                    # Getting Validation Loss and Accuracy (over entire validation set)
+                    data = next(val_loader)
+                    outputs, losses = tr_moder.val_func(data)
+
+                    losses_values = {k: v.item() for k, v in losses.items()}
+                    val_loss = losses_values['cls']
+
+                    labels = data['cls_labels']
+                    w_print = True if (e == config.nr_epochs - 1) else False
+                    predictions, _, correct = get_predictions(outputs, data['name'], labels, w_print=w_print)
+                    val_acc = correct / len(labels)
+
+                    # Getting Train Loss and Accuracy (over entire training set)
+                    data = next(iter(train_loader_full))
+                    outputs, losses = tr_moder.val_func(data)
+
+                    losses_values = {k: v.item() for k, v in losses.items()}
+                    train_loss = losses_values['cls']
+
+                    labels = data['cls_labels']
+                    predictions, _, correct = get_predictions(outputs, data['name'], labels, w_print=False)
+                    train_acc = correct / len(labels)
+
+                    # Feature Map Embeddings visualization
+                    if args.tsb_emb:
+                        if once:
+                            label_img = get_val_dummy_imgs(config.train_set_len,
+                                                           100, 100, labels.reshape(-1).numpy())
+                            once = False
+
+                        motion_enc_out = torch.from_numpy(activation['mot_encoder'])
+                        static_enc_out = torch.from_numpy(activation['static_encoder'])
+
+                        static_enc_out = static_enc_out.repeat(1, 1, motion_enc_out.shape[-1])
+                        feat_map = torch.cat([motion_enc_out, static_enc_out], dim=1)
+                        feat_map = feat_map.reshape(config.train_set_len, 768)
+                        class_labels = [classes[pred] for pred in predictions]
+
+                        train_tb.add_embedding(feat_map, metadata=class_labels,
+                                               label_img=label_img, global_step=clock.step)
+                    val_tb.add_scalars('Classification Loss',
+                                       {'Train Loss': train_loss,
+                                        'Val Loss': val_loss},
+                                       global_step=clock.step)
+                    val_tb.add_scalars('Accuracies',
+                                       {'Train Acc': train_acc,
+                                        'Val Acc': val_acc},
+                                       global_step=clock.step)
 
                     train_tb.add_scalar('learning_rate', tr_moder.optimizer.param_groups[-1]['lr'], clock.epoch)
                     # train_tb.add_scalar('cross_entropy', v, clock.step)

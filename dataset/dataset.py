@@ -4,7 +4,6 @@ from torch.utils.data import Dataset
 import os
 import os.path as osp
 import numpy as np
-import torch
 from torchvision import transforms
 import glob
 import pandas as pd
@@ -124,7 +123,7 @@ class BBFTSDataset(Dataset):
         self.transforms = transforms.Compose([
             NormalizeMotion(mean_pose=mean_pose, std_pose=std_pose),
             Resize(scale=(config.nr_joints * 2, -1)),
-            # GaussianNoise(mean_pose=0., std_pose=0.01),
+            GaussianNoise(mean_pose=0., std_pose=0.01),
             # RandomZeroMask(p=0.03),
             ToTensor()
         ])
@@ -159,33 +158,26 @@ class BBFTSDataset(Dataset):
         # Convert units
         motion = motion * np.array([self.scale_factoring_map[vid_name]['X'],
                                     self.scale_factoring_map[vid_name]['Y']]).reshape((1, 2, 1))
-        # print(motion[4, 0, ])
-        # print() TODO we have negs and pos in x vs y !!!
-        # print(motion[4, 1, ])
-        # exit()
+        # motion[:, 1, :] *= -1
+
         motion = self.transforms(motion)
 
         # Process shot trajectory
         shot_trajectory = self.shot_trajectories[str(vid_name)]
-        # shot_traj_len = len(shot_trajectory)
         # Convert shot trajectory coordinate system (relative to first ball in shot trajectory)
         # shot_trajectory[:, 0] = shot_trajectory[:, 0] - shot_trajectory[0][0]
         # shot_trajectory[:, 1] = -1 * (shot_trajectory[:, 1] - shot_trajectory[0][1])
         shot_trajectory = shot_trajectory.T[np.newaxis, ...]
-        # print(shot_trajectory[0, :, 0])
-        # print(hoop_bb[2])
-        # bz = (int(hoop_bb[1]) + int(hoop_bb[3])) // 2
-        # print(bz)
+
         shot_trajectory = trans_motion2d_to_hoop_coord_sys(shot_trajectory, hoop_bb)
-        # print(shot_trajectory[0, :, 0])
+
         shot_trajectory = shot_trajectory * np.array([self.scale_factoring_map[vid_name]['X'],
                                                       self.scale_factoring_map[vid_name]['Y']]).reshape((1, 2, 1))
-        # print(shot_trajectory[0, :, 0])
-        # exit()
 
         # Create Label for shot trajectory
         shot_trajectory = shot_trajectory[0, :, :].T
         # shot_trajectory shape is (T, 2)
+        # shot_trajectory[:, 1] *= -1
         # first_ball_coords = shot_trajectory[1, :]
         last_ball_coords = shot_trajectory[-1, :]
         high_ball_coords = shot_trajectory[1, :]
@@ -194,9 +186,11 @@ class BBFTSDataset(Dataset):
             if shot_trajectory[i][1] > high_ball_coords[1]:
                 high_ball_coords = shot_trajectory[i]
 
-        # shot_traj_coeffs = calc_polynomial_coeff_by_points_n_deg(shot_trajectory[0, :], shot_trajectory[1, :], deg=self.poly_deg)
-        # shot_trajectory = np.polyfit(shot_trajectory[0, :], shot_trajectory[1, :], 3)
-        trj_labels = torch.Tensor(np.array([high_ball_coords[0], high_ball_coords[1], last_ball_coords[0], last_ball_coords[1]]))
+        # trj_labels = torch.Tensor(np.array([first_ball_coords[0], first_ball_coords[1],
+        #                                     high_ball_coords[0], high_ball_coords[1],
+        #                                     last_ball_coords[0], last_ball_coords[1]]))
+        trj_labels = torch.Tensor(np.array([high_ball_coords[0], high_ball_coords[1],
+                                            last_ball_coords[0], last_ball_coords[1]]))
 
         # TODO its only required for visualization
         scale_factors = torch.Tensor(np.array([self.scale_factoring_map[vid_name]['X'],
@@ -268,6 +262,7 @@ class BBFTSDataset(Dataset):
             # motion2d = trans_motion2d_to_hips_coord_sys(motion2d)
             # Convert units
             motion2d_in_hoop_coords = motion2d_in_hoop_coords * np.array([scale_factor_x, scale_factor_y]).reshape((1, 2, 1))
+            # motion2d_in_hoop_coords[:, 1, :] *= -1
             all_joints.append(motion2d_in_hoop_coords)
 
         for path in all_paths_extras:
@@ -287,6 +282,7 @@ class BBFTSDataset(Dataset):
             # motion2d = trans_motion2d_to_hips_coord_sys(motion2d)
             # Convert units
             motion2d_in_hoop_coords = motion2d_in_hoop_coords * np.array([scale_factor_x, scale_factor_y]).reshape((1, 2, 1))
+            # motion2d_in_hoop_coords[:, 1, :] *= -1
             all_joints.append(motion2d_in_hoop_coords)
 
         all_joints = np.concatenate(all_joints, axis=2)
