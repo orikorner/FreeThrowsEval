@@ -197,8 +197,8 @@ class FtNet(nn.Module):
 
         # self.cls_head_dims = cls_head_dims
         self.cls_head = Head(dims=cls_head_dims, dbg_mode=dbg_mode)
-        if trj_head_dims is not None:
-            self.trj_head = Head(dims=trj_head_dims, dbg_mode=dbg_mode)
+        # if trj_head_dims is not None:
+        self.trj_head = Head(dims=trj_head_dims, dbg_mode=dbg_mode)
         # for name, param in self.mot_encoder.named_parameters():
         #     if param.requires_grad:
         #         print(name, param.data)
@@ -211,17 +211,9 @@ class FtNet(nn.Module):
         # self.static_encoder.apply(init_weights)
         # self.mot_pooling = nn.AdaptiveAvgPool2d((None, 4))
 
-        # self.fc1 = nn.Linear(768, 192)
-        # self.fc2 = nn.Linear(192, 48)
-        # self.fc3 = nn.Linear(48, 2)
-
         self.mot_encoder_print = PrintLayer(layer_name='Motion Encoder', msg='Output Shape Is', dbg_mode=dbg_mode)
         # self.mot_pooling_print = PrintLayer(layer_name='Motion Encoder Pooling', msg='Output Shape Is', dbg_mode=dbg_mode)
         self.static_encoder_print = PrintLayer(layer_name='Static Encoder', msg='Output Shape Is', dbg_mode=dbg_mode)
-        # self.fc1_print = PrintLayer(layer_name='Fully Connected 1', msg='Output Shape Is', dbg_mode=dbg_mode)
-        # self.fc2_print = PrintLayer(layer_name='Fully Connected 2', msg='Output Shape Is', dbg_mode=dbg_mode)
-        # self.fc3_print = PrintLayer(layer_name='Fully Connected 3', msg='Output Shape Is', dbg_mode=dbg_mode)
-        # self.lin_act = F.relu
 
     def forward(self, x):
         mot_out = self.mot_encoder(x)
@@ -260,3 +252,14 @@ class FtNet(nn.Module):
         own_state = self.state_dict()
         # print(own_state)
         print(own_state[name][0][0])
+
+    def print_state_dict(self):
+        own_state = self.state_dict()
+
+        for name, param in own_state.items():
+            begin_name = name.split('.')[0]
+            end_name = name.split('.')[-1]
+            if begin_name in ['mot_encoder', 'static_encoder'] and end_name == 'weight':
+                print(f'{name}: {param[0, :2, :]}')
+            elif begin_name in ['trj_head', 'cls_head'] and end_name == 'weight':
+                print(f'{name}: {param[:4, :4]}')

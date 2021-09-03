@@ -2,10 +2,11 @@ from dataset import get_dataloader
 from common import config
 from model import get_network
 from utils.visualization import print_predictions_info
-import torch
+from utils.utils import cycle
 import argparse
 import pandas as pd
 import os.path as osp
+from moderator import get_training_moderator
 
 
 def parse_args():
@@ -31,17 +32,14 @@ def main():
     labels_info_df = labels_info_df.loc[labels_info_df['phase'] == 'test']
 
     val_loader = get_dataloader('test', config, config.val_set_len, config.num_workers, shuffle=False)
-    # data = next(val_loader)
-    dataiter = iter(val_loader)
-    data = next(dataiter)
+    data = next(cycle(val_loader))
 
-    net.load_state_dict(torch.load(args.checkpoint))
-    net.eval()
-    with torch.no_grad():
-        data_motion = data['motion'].to(config.device)
-        outputs = net(data_motion)
+    tr_moder = get_training_moderator(config, net, lr=1)
+    tr_moder.pre_train_load_network(args.checkpoint)
 
-        print_predictions_info(outputs, data['label'], data['name'], labels_info_df)
+    outputs, losses = tr_moder.val_func(data)
+
+    print_predictions_info(outputs, data['cls_labels'], data['name'], labels_info_df)
 
 
 if __name__ == '__main__':

@@ -37,9 +37,26 @@ def trans_motion2d_to_hoop_coord_sys(motion, hoop_pos):
     hoop_bb_x = int(hoop_pos[2])
     hoop_bb_y = (int(hoop_pos[1]) + int(hoop_pos[3])) // 2
     hoop_np = np.array([hoop_bb_x, hoop_bb_y])
-    # motion = motion - np.tile(hoop_np, (num_frames, 1)).T
+
     motion = -1 * (motion - np.tile(hoop_np, (num_frames, 1)).T)
+    # motion[:, 1, :] *= -1 TODO this version reduces training acc to 0.9 but hurts val by about 0.2-0.4 acc also
     return motion
+
+
+def inv_trans_motion2d_to_hoop_coord_sys(motion, hoop_pos):
+    _, _, num_frames = motion.shape
+    hoop_bb_x = int(hoop_pos[2])
+    hoop_bb_y = (int(hoop_pos[1]) + int(hoop_pos[3])) // 2
+    hoop_np = np.array([hoop_bb_x, hoop_bb_y])
+
+    motion = -1 * motion + np.tile(hoop_np, (num_frames, 1)).T
+    return motion
+
+
+def inv_trans_motion2d_to_hoop_coord_sys_w_scales(scaled_motion, hoop_pos, scale_factor_x, scale_factor_y):
+    scaled_motion[:, 0, :] /= scale_factor_x
+    scaled_motion[:, 1, :] /= scale_factor_y
+    return inv_trans_motion2d_to_hoop_coord_sys(scaled_motion, hoop_pos)
 
 
 def calc_pixels_to_real_units_scaling_factor(motion, hoop_pos, alpha=0.4):

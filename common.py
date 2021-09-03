@@ -26,25 +26,17 @@ class Config:
 
     # dataset info
     # TODO
-    img_size = (512, 512)
-    # unit = 128
+    img_size = (720, 1280)
     nr_joints = 15
     len_joints = 2 * nr_joints - 2
-    # view_angles = [(0, 0, -np.pi / 2),
-    #                (0, 0, -np.pi / 3),
-    #                (0, 0, -np.pi / 6),
-    #                (0, 0, 0),
-    #                (0, 0, np.pi / 6),
-    #                (0, 0, np.pi / 3),
-    #                (0, 0, np.pi / 2)]
+    pre_release_n_frames = 35
+    post_release_n_frames = 10
 
     # network channels
     mot_en_channels = None
     body_en_channels = None
     cls_head_dims = None
     trj_head_dims = None
-    # view_en_channels = None
-    # de_channels = None
 
     # training settings
     # use_triplet = True
@@ -53,11 +45,6 @@ class Config:
     # use_footvel_loss = False
     # foot_idx = [20, 21, 26, 27]
     # footvel_loss_weight = 0.1
-
-    pre_release_n_frames = 35
-    post_release_n_frames = 10
-
-    poly_deg = 2
 
     nr_epochs = 250
     # batch_size = 24
@@ -78,29 +65,18 @@ class Config:
         utils.ensure_dirs([self.log_dir, self.model_dir])
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_ids)
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.objective_mode = args.obj_mode if hasattr(args, 'obj_mode') else 'cls'
-        self.nr_epochs = args.n_epochs if hasattr(args, 'n_epochs') else 250
-        # self.poly_deg = args.poly_deg if hasattr(args, 'poly_deg') else 2
         self.meanpose_path = './bbfts_data/meanpose.npy'
         self.stdpose_path = './bbfts_data/stdpose.npy'
+        self.objective_mode = args.obj_mode if hasattr(args, 'obj_mode') else 'cls'
+        self.nr_epochs = args.n_epochs if hasattr(args, 'n_epochs') else 250
 
-        if self.objective_mode == 'cls':
-            self.mot_en_channels = [self.len_joints + 2, 64, 96, 128]
-            self.body_en_channels = [self.len_joints + 2, 32, 48, 64]
-            self.cls_head_dims = [768, 192, 48, 2]
+        self.mot_en_channels = [self.len_joints + 2, 64, 96, 128]
+        self.body_en_channels = [self.len_joints + 2, 32, 48, 64]
+        self.cls_head_dims = [768, 192, 48, 2]
+        self.trj_head_dims = [768, 192, 48, 4]
 
-        elif self.objective_mode == 'trj':
-            self.mot_en_channels = [self.len_joints + 2, 64, 96, 128]
-            self.body_en_channels = [self.len_joints + 2, 32, 48, 64]
-            self.cls_head_dims = [768, 192, 48, 2]
-            self.trj_head_dims = [768, 192, 48, 4]
-            # Static
-            # self.cls_head_dims = [320, 192, 48, 2]
-            # self.trj_head_dims = [320, 192, 48, 4]
-            # self.meanpose_path = './bbfts_data/extras/meanpose.npy'
-            # self.stdpose_path = './bbfts_data/extras/stdpose.npy'
-        else:
-            raise ValueError('Bad objective mode, must be trj (trajectory) or cls (classification)')
-
+        # Static
+        # self.cls_head_dims = [320, 192, 48, 2]
+        # self.trj_head_dims = [320, 192, 48, 4]
 
 config = Config()

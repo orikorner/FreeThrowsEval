@@ -57,10 +57,6 @@ class Moderator(object):
     @abstractmethod
     def update_network(self, loss_dcit, info=None):
         pass
-        # loss = sum(loss_dcit.values())
-        # self.optimizer.zero_grad()
-        # loss.backward()
-        # self.optimizer.step()
 
     def update_learning_rate(self, metrics):
         self.scheduler.step()

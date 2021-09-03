@@ -89,7 +89,7 @@ class BBFTSBatchSchedulerSampler(Sampler):
 
 class BBFTSDataset(Dataset):
 
-    def __init__(self, subset, config):
+    def __init__(self, subset, config, gauss_noise):
 
         self.subset = subset
 
@@ -123,7 +123,7 @@ class BBFTSDataset(Dataset):
         self.transforms = transforms.Compose([
             NormalizeMotion(mean_pose=mean_pose, std_pose=std_pose),
             Resize(scale=(config.nr_joints * 2, -1)),
-            GaussianNoise(mean_pose=0., std_pose=0.01),
+            GaussianNoise(mean_pose=0., std_pose=gauss_noise),
             # RandomZeroMask(p=0.03),
             ToTensor()
         ])
@@ -161,7 +161,6 @@ class BBFTSDataset(Dataset):
         # motion[:, 1, :] *= -1
 
         motion = self.transforms(motion)
-
         # Process shot trajectory
         shot_trajectory = self.shot_trajectories[str(vid_name)]
         # Convert shot trajectory coordinate system (relative to first ball in shot trajectory)

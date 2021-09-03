@@ -1,34 +1,23 @@
 import numpy as np
-import torch
-import torch.nn.functional as F
-import matplotlib.pyplot as plt
-import cv2
-import math
 import argparse
-from tqdm import tqdm
 import utils
-from PIL import Image
-import imageio
 import os
 import os.path as osp
 import pandas as pd
-# from utils import hex2rgb
 from common import config
 from model import get_network
 from dataset import get_dataloader
 from moderator import get_training_moderator
 from utils.visualization import make_shot_trajectory_image
-from utils.operators import calc_polynomial_coeff_by_points_n_deg
 from utils.utils import cycle
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--data-dir', type=str, default='bbfts_data', help='path to data dir of a certain phase')
-    parser.add_argument('--subset', type=str, default='test', help='path to data dir of a certain phase')
+    parser.add_argument('--data-dir', type=str, default='bbfts_data', help='path to data dir')
+    parser.add_argument('--subset', type=str, default='test', help='test/train/extras')
     parser.add_argument('--motion-dir', type=str, default='motion', help='name of joints dir')
-    parser.add_argument('--clips-dir', type=str, default='clips', help='name of clips dir')
     parser.add_argument('--out-dir', type=str, default='visualizations/test', help='full path to output dir')
 
     parser.add_argument('--shot-traj-dir', type=str, default='shot_trajectories', help='name of shot trajectory dir')
@@ -53,8 +42,6 @@ if __name__ == '__main__':
 
     motion_dir = osp.join(data_dir, args.motion_dir)
 
-    clips_dir = osp.join(data_dir, args.clips_dir)
-    clips = [x for x in os.listdir(clips_dir) if x.endswith('.mp4')]
     hoops_df = pd.read_csv(osp.join(data_dir, 'hoops_info.csv'), header=0)
 
     color = utils.hex2rgb('#a50b69#b73b87#db9dc3')
@@ -64,10 +51,9 @@ if __name__ == '__main__':
     net = net.to(config.device)
     tr_moder = get_training_moderator(config, net, lr=1)
     tr_moder.pre_train_load_network(args.checkpoint)
-    data_len = len(clips)
+    data_len = len(os.listdir(motion_dir))
     data_loader = get_dataloader(args.subset, config, data_len, config.num_workers, shuffle=False)
-    data_loader = cycle(data_loader)
-    data = next(data_loader)
+    data = next(cycle(data_loader))
 
     outputs, losses = tr_moder.val_func(data)
     trj_output = outputs['trj'].detach().cpu().numpy()

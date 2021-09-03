@@ -166,6 +166,68 @@ def rgb2rgba(color):
     return (color[0], color[1], color[2], 255)
 
 
+def joints2image_w_colors(joints_position, colors_info, limb_color, H=720, W=1280, shot_released=False, imtype=np.uint8):
+    nr_joints = joints_position.shape[0]
+    assert nr_joints == 15
+
+    limb_seq = [[0, 1], [1, 2], [1, 5], [1, 8], [2, 3], [3, 4], [5, 6], [6, 7],
+               [8, 9], [8, 12], [9, 10], [10, 11], [12, 13], [13, 14]]
+
+
+    L = limb_color[0]
+    M = limb_color[1]
+    R = limb_color[2]
+
+    colors_limbs = [M, L, R, M, L, L, R,
+                    R, L, R, L, L, L, R, R, R,
+                    R, R]
+
+    canvas = np.ones(shape=(H, W, 3)) * 255
+    if shot_released:
+        canvas[-10:, :, 1:-1] = 0  # Set Bottom frame line in Red
+        canvas[:10, :, 1:-1] = 0  # Set Bottom frame line in Red
+        canvas[:, -10:, 1:-1] = 0  # Set Bottom frame line in Red
+        canvas[:, :10, 1:-1] = 0  # Set Bottom frame line in Red
+
+    hips = joints_position[8]
+    neck = joints_position[1]
+    torso_length = ((hips[1] - neck[1]) ** 2 + (hips[0] - neck[0]) ** 2) ** 0.5
+
+    head_radius = int(torso_length/4.5)
+    joints_radius = 7
+
+    cv2.circle(canvas, (int(joints_position[0][0]), int(joints_position[0][1])), head_radius,
+               colors_info[0], thickness=-1)
+
+    for i in range(1, nr_joints):
+        cv2.circle(canvas, (int(joints_position[i][0]), int(joints_position[i][1])), joints_radius,
+                   colors_info[i], thickness=-1)
+
+    stickwidth = 2
+
+    for i in range(len(limb_seq)):
+        limb = limb_seq[i]
+        cur_canvas = canvas.copy()
+        point1_index = limb[0]
+        point2_index = limb[1]
+
+        point1 = joints_position[point1_index]
+        point2 = joints_position[point2_index]
+        X = [point1[1], point2[1]]
+        Y = [point1[0], point2[0]]
+        mX = np.mean(X)
+        mY = np.mean(Y)
+        length = ((X[0] - X[1]) ** 2 + (Y[0] - Y[1]) ** 2) ** 0.5
+        alpha = math.degrees(math.atan2(X[0] - X[1], Y[0] - Y[1]))
+
+        polygon = cv2.ellipse2Poly((int(mY), int(mX)), (int(length / 2), stickwidth), int(alpha), 0, 360, 1)
+        cv2.fillConvexPoly(cur_canvas, polygon, colors_limbs[i])
+        # cv2.fillConvexPoly(cur_canvas, polygon, colors_info[i])
+        canvas = cv2.addWeighted(canvas, 0.4, cur_canvas, 0.6, 0)
+
+    return canvas.astype(imtype)
+
+
 def joints2image(joints_position, colors, transparency=False, H=512, W=512, nr_joints=49, shot_released=False, imtype=np.uint8):
     nr_joints = joints_position.shape[0]
 
@@ -217,8 +279,6 @@ def joints2image(joints_position, colors, transparency=False, H=512, W=512, nr_j
     torso_length = ((hips[1] - neck[1]) ** 2 + (hips[0] - neck[0]) ** 2) ** 0.5
 
     head_radius = int(torso_length/4.5)
-    end_effectors_radius = int(torso_length/15)
-    end_effectors_radius = 7
     joints_radius = 7
 
     cv2.circle(canvas, (int(joints_position[0][0]), int(joints_position[0][1])), head_radius, colors_joints[0], thickness=-1)
@@ -355,7 +415,7 @@ def motion2video(motion, h, w, save_path, colors, shot_rel_frame=None, shot_traj
         if shot_rel_frame is not None and i >= shot_rel_frame:
             shot_released = True
         [img, img_cropped] = joints2image(motion[:, :, i], colors, transparency, H=h, W=w, nr_joints=nr_joints, shot_released=shot_released)
-        if shot_released and k < len(shot_traj):
+        if shot_traj is not None and shot_released and k < len(shot_traj):
             cv2.circle(img, (int(shot_traj[k][0]), int(shot_traj[k][1])), 5, [255, 0, 0], thickness=4)
             k += 1
         # Draw Hoop

@@ -51,8 +51,7 @@ class Resize(object):
         """
         # xs = sample[:, 0, :]
         # ys = sample[:, 1, :]
-        # return np.concatenate((xs, ys), axis=0)
-        # TODO
+        # return np.concatenate((xs, ys), axis=0) TODO this seems to have no effect
         return sample.reshape(self.scale)
 
     def __repr__(self):
@@ -95,6 +94,8 @@ class GaussianNoise(object):
         :param sample: input sample (np.array)
         :return: sample with added gaussian noise
         """
+        if self.std_pose is None:
+            return sample
         sigma = np.ones(sample.shape) * self.std_pose
         mean = np.ones(sample.shape) * self.mean_pose
         sample = sample + np.random.normal(size=sample.shape) * sigma + mean
